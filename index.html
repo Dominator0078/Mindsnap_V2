@@ -305,6 +305,7 @@
       });
 
       // Multiplayer (Supabase Realtime Presence + Broadcast)
+      const DEBUG_MP = true;
       let supa = null;
       let lobbyChannel = null;
       let lobbyState = new Map(); // clientId -> meta
@@ -361,6 +362,7 @@
         if (scanning) {
           const searchingCount = Array.from(lobbyState.values()).filter((m) => m.status === "searching").length;
           radarSub.textContent = `Scanning… ${searchingCount} player${searchingCount === 1 ? "" : "s"} searching`;
+          if (DEBUG_MP) console.log("[MP] presence sync", { searchingCount, total: lobbyState.size });
           rebuildBlips();
           maybeMatchmake();
         }
@@ -534,6 +536,7 @@
               await lobbyChannel.send({ type: "broadcast", event: "match_start", payload: leaderPayload });
             })
             .subscribe(async (status) => {
+              if (DEBUG_MP) console.log("[MP] lobby status", status);
               if (status === "SUBSCRIBED") {
                 setPresenceStatus("searching");
                 updateLobbyFromPresence();
