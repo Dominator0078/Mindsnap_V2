@@ -1,4 +1,5 @@
-"use strict";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.10";
+// Module scripts are strict by default.
 
 // MindSnap Duels - Game Zone runtime (touch-first, end-of-match upload).
 
@@ -163,6 +164,7 @@ try {
 // Supabase (Multiplayer)
 const SUPABASE_URL = "https://kqhgodyuzcxilurksigq.supabase.co";
 const SUPABASE_KEY = "sb_publishable_vT7txYsSlcpDbOfOsuqh9Q_-aTrvWAU";
+let supaClient = null;
 
 const state = {
   live: false,
@@ -206,10 +208,26 @@ const state = {
     opponentId: null,
     opponentName: null,
     opponentScore: 0,
+    opponentPatternNumber: 0,
     opponentFinal: null,
     myFinal: null,
-    scoreSendId: null,
     started: false
+  }
+};
+
+// Expose a tiny debug surface for debug_module.js (module scope isn't global).
+window.__mindsnap = {
+  get mode() {
+    return mode;
+  },
+  get state() {
+    return state;
+  },
+  get localClientId() {
+    return localClientId;
+  },
+  get localPlayerName() {
+    return localPlayerName;
   }
 };
 
@@ -289,41 +307,23 @@ function updateHud() {
   timerEl.textContent = String(state.timeLeft);
   playerScoreEl.textContent = String(state.player.totalScore);
   botScoreEl.textContent = String(mode === "pvp" ? state.pvp.opponentScore : state.bot.totalScore);
-
-  if (state.pvp.enabled && state.live) schedulePvPScoreSend();
 }
 
-function schedulePvPScoreSend() {
-  if (!state.pvp.enabled || !state.pvp.channel) return;
-  if (state.pvp.scoreSendId) return;
-  state.pvp.scoreSendId = setTimeout(() => {
-    state.pvp.scoreSendId = null;
-    sendPvPScore();
-  }, 250);
-}
-
-function sendPvPScore() {
+function sendPvPScoreUpdate({ patternNumber } = {}) {
   if (!state.pvp.enabled || !state.pvp.channel) return;
   const payload = {
     matchId: state.pvp.matchId,
-    clientId: localClientId,
+    fromUserId: localClientId,
     name: localPlayerName,
-    score: state.player.totalScore,
-    patternsPlayed: state.player.patternCount,
-    timeLeft: state.timeLeft
+    opponentTotalScore: state.player.totalScore,
+    opponentPatternNumber: Number.isFinite(patternNumber) ? patternNumber : state.player.patternCount,
+    at: Date.now()
   };
 
   state.pvp.channel.send({
     type: "broadcast",
-    event: "score",
-    payload
-  });
-
-  // Compatibility with older modules/guides.
-  state.pvp.channel.send({
-    type: "broadcast",
     event: "score_update",
-    payload: { from: localClientId, score: state.player.totalScore, timestamp: Date.now() }
+    payload
   });
 }
 
@@ -332,22 +332,16 @@ function sendPvPFinal() {
   state.pvp.myFinal = state.player.totalScore;
   const payload = {
     matchId: state.pvp.matchId,
-    clientId: localClientId,
+    fromUserId: localClientId,
     name: localPlayerName,
-    score: state.player.totalScore
+    finalTotalScore: state.player.totalScore,
+    at: Date.now()
   };
 
   state.pvp.channel.send({
     type: "broadcast",
-    event: "final",
-    payload
-  });
-
-  // Compatibility with older modules/guides.
-  state.pvp.channel.send({
-    type: "broadcast",
     event: "match_end",
-    payload: { from: localClientId, finalScore: state.player.totalScore, timestamp: Date.now() }
+    payload
   });
 }
 
@@ -373,10 +367,17 @@ function endPvPBecauseLeft() {
 function initPvPRealtime() {
   if (!state.pvp.enabled || !state.pvp.matchId) return;
   if (state.pvp.channel) return;
-  if (typeof supabase === "undefined") return;
-
-  const { createClient } = supabase;
-  const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+  if (!supaClient) {
+    // Disable auth session persistence to avoid storage access being blocked by tracking protection.
+    supaClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+  }
+  const supa = supaClient;
   const channel = supa.channel(`mindsnap:match:${state.pvp.matchId}`, {
     config: {
       broadcast: { self: true, ack: false },
@@ -385,43 +386,49 @@ function initPvPRealtime() {
   });
 
   channel
-    .on("broadcast", { event: "score" }, ({ payload }) => {
-      if (!payload || payload.clientId === localClientId) return;
-      state.pvp.opponentScore = Number(payload.score || 0);
+    .on("broadcast", { event: "score_update" }, ({ payload }) => {
+      if (!payload) return;
+      const from = payload.fromUserId;
+      if (from === localClientId) return;
+      if (state.pvp.opponentId && from && from !== state.pvp.opponentId) return;
+
+      const total = Number(payload.opponentTotalScore);
+      if (!Number.isFinite(total)) return;
+
+      const pn = Number(payload.opponentPatternNumber ?? 0);
+      if (Number.isFinite(pn) && pn > 0) {
+        if (pn < (state.pvp.opponentPatternNumber || 0)) return;
+        state.pvp.opponentPatternNumber = pn;
+      }
+
       if (payload.name) {
         state.pvp.opponentName = String(payload.name);
         if (opponentNameEl) opponentNameEl.textContent = state.pvp.opponentName;
       }
+
+      state.pvp.opponentScore = Math.max(state.pvp.opponentScore || 0, total);
       updateHud();
     })
-    .on("broadcast", { event: "score_update" }, ({ payload }) => {
-      if (!payload || payload.from === localClientId) return;
-      if (state.pvp.opponentId && payload.from !== state.pvp.opponentId) return;
-      state.pvp.opponentScore = Number(payload.score || 0);
-      updateHud();
-    })
-    .on("broadcast", { event: "final" }, ({ payload }) => {
-      if (!payload || payload.clientId === localClientId) return;
-      state.pvp.opponentFinal = Number(payload.score || 0);
-      state.pvp.opponentScore = state.pvp.opponentFinal;
+    .on("broadcast", { event: "match_end" }, ({ payload }) => {
+      if (!payload) return;
+      const from = payload.fromUserId;
+      if (from === localClientId) return;
+      if (state.pvp.opponentId && from && from !== state.pvp.opponentId) return;
+
+      const final = Number(payload.finalTotalScore);
+      if (!Number.isFinite(final)) return;
+      state.pvp.opponentFinal = final;
+      state.pvp.opponentScore = Math.max(state.pvp.opponentScore || 0, final);
       updateHud();
       if (!state.live && overlayEl.classList.contains("show")) {
-        // Update winner text if overlay is already visible.
         const you = state.player.totalScore;
         const opp = state.pvp.opponentFinal;
         resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
         resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
       }
     })
-    .on("broadcast", { event: "match_end" }, ({ payload }) => {
-      if (!payload || payload.from === localClientId) return;
-      if (state.pvp.opponentId && payload.from !== state.pvp.opponentId) return;
-      state.pvp.opponentFinal = Number(payload.finalScore || 0);
-      state.pvp.opponentScore = state.pvp.opponentFinal;
-      updateHud();
-    })
     .on("broadcast", { event: "leave" }, ({ payload }) => {
-      if (!payload || payload.clientId === localClientId) return;
+      if (!payload || payload.fromUserId === localClientId) return;
       endPvPBecauseLeft();
     })
     .on("presence", { event: "leave" }, ({ leftPresences }) => {
@@ -431,13 +438,29 @@ function initPvPRealtime() {
       if (left.some((m) => m?.clientId === oppId)) endPvPBecauseLeft();
     })
     .subscribe(async (status) => {
-      if (status !== "SUBSCRIBED") return;
-      await channel.track({ clientId: localClientId, name: localPlayerName, online_at: new Date().toISOString() });
+      if (status === "SUBSCRIBED") {
+        await channel.track({ clientId: localClientId, name: localPlayerName, online_at: new Date().toISOString() });
+        return;
+      }
+      if (status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+        console.warn("[MP] match channel status", status);
+        if (state.live) {
+          state.live = false;
+          cancelAnimationFrame(state.rafId);
+          setAllTilesDisabled(true);
+          setBoardLoading(false);
+
+          resultModeEl.textContent = "Multiplayer Result";
+          resultTitleEl.textContent = "Connection Error";
+          resultBodyEl.textContent = "Realtime connection failed. Return to Home and retry multiplayer.";
+          overlayEl.classList.add("show");
+        }
+      }
     });
 
   // Best-effort: signal leave before unload (presence will also drop).
   document.addEventListener("pagehide", () => {
-    channel.send({ type: "broadcast", event: "leave", payload: { clientId: localClientId } });
+    channel.send({ type: "broadcast", event: "leave", payload: { fromUserId: localClientId } });
   });
 
   state.pvp.channel = channel;
@@ -527,6 +550,7 @@ function finishPlayerPattern() {
   current.done = true;
   state.player.totalScore += Math.max(0, current.rawScore);
   updateHud();
+  if (state.pvp.enabled) sendPvPScoreUpdate({ patternNumber: current.patternNumber });
   setAllTilesDisabled(true);
   setBoardLoading(true);
 

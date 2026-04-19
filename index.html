@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="home.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
     <div id="ghost-match" class="ghost-match" aria-hidden="true">
@@ -98,7 +97,9 @@
       </div>
     </div>
 
-    <script>
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.10";
+
       const ghostGrid = document.getElementById("ghost-grid");
       const ghostMatch = document.getElementById("ghost-match");
 
@@ -315,6 +316,8 @@
       let lastMatchId = null;
       let leaderPayload = null;
       let scanPollId = null;
+      let lobbySubscribed = false;
+      let lobbyWatchdogId = null;
 
       function rebuildBlips() {
         radarBlips.textContent = "";
@@ -374,16 +377,20 @@
         return { difficulty, duration: Number(duration) };
       }
 
-      function setPresenceStatus(status, extra = {}) {
+      async function setPresenceStatus(status, extra = {}) {
         if (!lobbyChannel) return;
-        lobbyChannel.track({
-          clientId,
-          name: playerName || "Player",
-          status,
-          settings: getSettings(),
-          updatedAt: new Date().toISOString(),
-          ...extra
-        });
+        try {
+          await lobbyChannel.track({
+            clientId,
+            name: playerName || "Player",
+            status,
+            settings: getSettings(),
+            updatedAt: new Date().toISOString(),
+            ...extra
+          });
+        } catch {
+          /* ignore */
+        }
       }
 
       function getSearchingIds() {
@@ -432,6 +439,25 @@
         setPresenceStatus("in_match", { matchId: startPayload.matchId });
         await waitForMinScan();
         navigateToPvP(startPayload);
+      }
+
+      function failScanning(message) {
+        scanning = false;
+        matchCommitted = false;
+        lastMatchId = null;
+        leaderPayload = null;
+        radarSub.textContent = message;
+        setRadar(true);
+
+        if (lobbyChannel) setPresenceStatus("idle");
+        if (scanPollId) {
+          clearInterval(scanPollId);
+          scanPollId = null;
+        }
+        if (lobbyWatchdogId) {
+          clearTimeout(lobbyWatchdogId);
+          lobbyWatchdogId = null;
+        }
       }
 
       function makeMatchStartPayload(leaderId, otherId) {
@@ -504,10 +530,17 @@
         scanStartedAt = Date.now();
         setRadar(true);
         radarSub.textContent = "Hold tight. Match starts automatically.";
+        lobbySubscribed = false;
 
         if (!supa) {
-          const { createClient } = supabase;
-          supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+          // Disable auth session persistence to avoid storage access being blocked by tracking protection.
+          supa = createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false,
+              detectSessionInUrl: false
+            }
+          });
         }
 
         if (!lobbyChannel) {
@@ -538,15 +571,32 @@
             .subscribe(async (status) => {
               if (DEBUG_MP) console.log("[MP] lobby status", status);
               if (status === "SUBSCRIBED") {
-                setPresenceStatus("searching");
+                lobbySubscribed = true;
+                if (lobbyWatchdogId) {
+                  clearTimeout(lobbyWatchdogId);
+                  lobbyWatchdogId = null;
+                }
+                await setPresenceStatus("searching");
                 updateLobbyFromPresence();
                 return;
               }
-              if (status === "CHANNEL_ERROR") {
-                radarSub.textContent = "Multiplayer error. Please retry.";
-                scanning = false;
+              if (status === "TIMED_OUT") {
+                failScanning(
+                  "Multiplayer timed out. If you opened this via file://, run it from a local server (or Vercel) and try again."
+                );
+                return;
+              }
+              if (status === "CLOSED" || status === "CHANNEL_ERROR") {
+                failScanning("Multiplayer connection failed. Please retry.");
               }
             });
+
+          if (lobbyWatchdogId) clearTimeout(lobbyWatchdogId);
+          lobbyWatchdogId = setTimeout(() => {
+            if (scanning && !lobbySubscribed) {
+              failScanning("Multiplayer couldn’t connect. Check Supabase Realtime is enabled, then retry.");
+            }
+          }, 6500);
         } else {
           setPresenceStatus("searching");
           updateLobbyFromPresence();
@@ -570,6 +620,10 @@
         if (scanPollId) {
           clearInterval(scanPollId);
           scanPollId = null;
+        }
+        if (lobbyWatchdogId) {
+          clearTimeout(lobbyWatchdogId);
+          lobbyWatchdogId = null;
         }
       }
 

@@ -44,24 +44,28 @@ function runStartupDiagnostics() {
   console.log(supabaseOk ? "✅ Supabase" : "❌ Supabase");
 
   try {
-    const modeLabel = typeof mode === "string" ? mode : "(unknown)";
+    const ctx = window.__mindsnap;
+    const modeLabel = ctx?.mode || "(unknown)";
     console.log(`✅ Mode: ${modeLabel}`);
     if (modeLabel === "pvp") {
-      console.log(`✅ PvP matchId: ${state?.pvp?.matchId}`);
-      console.log(`✅ PvP seed: ${state?.pvp?.seed}`);
-      console.log(`✅ Local clientId: ${typeof localClientId !== "undefined" ? localClientId : "(missing)"}`);
-      console.log(`✅ Local name: ${typeof localPlayerName !== "undefined" ? localPlayerName : "(missing)"}`);
-      console.log(`✅ OpponentId: ${state?.pvp?.opponentId}`);
-      console.log(`✅ OpponentName: ${state?.pvp?.opponentName}`);
+      console.log(`✅ PvP matchId: ${ctx?.state?.pvp?.matchId}`);
+      console.log(`✅ PvP seed: ${ctx?.state?.pvp?.seed}`);
+      console.log(`✅ Local clientId: ${ctx?.localClientId || "(missing)"}`);
+      console.log(`✅ Local name: ${ctx?.localPlayerName || "(missing)"}`);
+      console.log(`✅ OpponentId: ${ctx?.state?.pvp?.opponentId}`);
+      console.log(`✅ OpponentName: ${ctx?.state?.pvp?.opponentName}`);
     }
   } catch {
     console.log("❌ Mode: (missing)");
   }
 
   try {
-    console.log(`✅ Board element: ${typeof boardEl !== "undefined" && boardEl ? "found" : "missing"}`);
-    console.log(`✅ Timer element: ${typeof timerEl !== "undefined" && timerEl ? "found" : "missing"}`);
-    console.log(`✅ Overlay element: ${typeof overlayEl !== "undefined" && overlayEl ? "found" : "missing"}`);
+    const hasBoard = !!document.getElementById("board");
+    const hasTimer = !!document.getElementById("timer");
+    const hasOverlay = !!document.getElementById("overlay");
+    console.log(`✅ Board element: ${hasBoard ? "found" : "missing"}`);
+    console.log(`✅ Timer element: ${hasTimer ? "found" : "missing"}`);
+    console.log(`✅ Overlay element: ${hasOverlay ? "found" : "missing"}`);
   } catch {
     /* ignore */
   }
@@ -71,39 +75,11 @@ function runStartupDiagnostics() {
 
 function installPvPDebugHooks() {
   try {
-    if (typeof mode !== "string" || mode !== "pvp") return;
-
-    if (typeof initPvPRealtime === "function") {
-      const originalInit = initPvPRealtime;
-      initPvPRealtime = function initPvPRealtime_debug() {
-        debugLog("PVP", "initPvPRealtime()", {
-          enabled: state?.pvp?.enabled,
-          matchId: state?.pvp?.matchId,
-          opponentId: state?.pvp?.opponentId,
-          hasSupabase: typeof supabase !== "undefined"
-        });
-        return originalInit.apply(this, arguments);
-      };
-    }
-
-    if (typeof sendPvPScore === "function") {
-      const originalScore = sendPvPScore;
-      sendPvPScore = function sendPvPScore_debug() {
-        debugLog("PVP-SEND", "score", { score: state?.player?.totalScore, timeLeft: state?.timeLeft });
-        return originalScore.apply(this, arguments);
-      };
-    }
-
-    if (typeof sendPvPFinal === "function") {
-      const originalFinal = sendPvPFinal;
-      sendPvPFinal = function sendPvPFinal_debug() {
-        debugLog("PVP-SEND", "final", { score: state?.player?.totalScore });
-        return originalFinal.apply(this, arguments);
-      };
-    }
+    const ctx = window.__mindsnap;
+    if (!ctx || ctx.mode !== "pvp") return;
 
     // Tap into Supabase channel lifecycle if present.
-    const ch = state?.pvp?.channel;
+    const ch = ctx?.state?.pvp?.channel;
     if (ch && typeof ch.subscribe === "function") {
       debugLog("PVP", "Channel exists", { topic: ch.topic || "(unknown)" });
     } else {
