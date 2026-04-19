@@ -46,7 +46,7 @@ if (mode === "solo") botCardEl.style.display = "none";
 
 const playerNameKey = "mindsnap_name_v1";
 const clientIdKey = "mindsnap_client_id_v1";
-let localClientId = localStorage.getItem(clientIdKey) || "";
+let localClientId = sessionStorage.getItem(clientIdKey) || localStorage.getItem(clientIdKey) || "";
 const localPlayerName = (localStorage.getItem(playerNameKey) || "You").trim() || "You";
 
 if (!localClientId) {
@@ -56,6 +56,7 @@ if (!localClientId) {
     localClientId = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
   try {
+    sessionStorage.setItem(clientIdKey, localClientId);
     localStorage.setItem(clientIdKey, localClientId);
   } catch {
     /* ignore */

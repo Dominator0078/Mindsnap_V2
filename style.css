@@ -131,8 +131,9 @@ body {
 }
 
 .board {
-  width: min(78vw, 78vh, 560px);
-  height: min(78vw, 78vh, 560px);
+  width: min(100%, 78vh, 560px);
+  aspect-ratio: 1 / 1;
+  height: auto;
   display: grid;
   grid-template-columns: repeat(var(--size, 4), minmax(0, 1fr));
   grid-template-rows: repeat(var(--size, 4), minmax(0, 1fr));
@@ -274,14 +275,12 @@ body {
   }
 
   .board {
-    width: min(88vw, 88vh, 460px);
-    height: min(88vw, 88vh, 460px);
+    width: min(100%, 88vh, 460px);
   }
 }
 
 @media (min-width: 1200px) {
   .board {
-    width: min(78vw, 78vh, 520px);
-    height: min(78vw, 78vh, 520px);
+    width: min(100%, 78vh, 520px);
   }
 }

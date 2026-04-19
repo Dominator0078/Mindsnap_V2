@@ -257,13 +257,16 @@
       }
 
       function ensureClientId() {
-        let id = localStorage.getItem(CLIENT_KEY);
+        // Use sessionStorage so two tabs can be two distinct players.
+        let id = sessionStorage.getItem(CLIENT_KEY) || localStorage.getItem(CLIENT_KEY);
         if (id) return id;
         try {
           id = crypto.randomUUID();
         } catch {
           id = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
         }
+        sessionStorage.setItem(CLIENT_KEY, id);
+        // Best-effort backup for same-tab navigation in older browsers.
         localStorage.setItem(CLIENT_KEY, id);
         return id;
       }
@@ -310,6 +313,7 @@
       let matchCommitted = false;
       let lastMatchId = null;
       let leaderPayload = null;
+      let scanPollId = null;
 
       function rebuildBlips() {
         radarBlips.textContent = "";
@@ -334,9 +338,15 @@
         const metas = [];
         for (const key of Object.keys(stateObj || {})) {
           const entry = stateObj[key];
-          for (const meta of entry?.metas || []) {
-            metas.push(meta);
+          if (Array.isArray(entry)) {
+            for (const meta of entry) metas.push(meta);
+            continue;
           }
+          if (Array.isArray(entry?.metas)) {
+            for (const meta of entry.metas) metas.push(meta);
+            continue;
+          }
+          if (entry && typeof entry === "object") metas.push(entry);
         }
         return metas;
       }
@@ -349,6 +359,8 @@
           lobbyState.set(meta.clientId, meta);
         }
         if (scanning) {
+          const searchingCount = Array.from(lobbyState.values()).filter((m) => m.status === "searching").length;
+          radarSub.textContent = `Scanning… ${searchingCount} player${searchingCount === 1 ? "" : "s"} searching`;
           rebuildBlips();
           maybeMatchmake();
         }
@@ -522,14 +534,27 @@
               await lobbyChannel.send({ type: "broadcast", event: "match_start", payload: leaderPayload });
             })
             .subscribe(async (status) => {
-              if (status !== "SUBSCRIBED") return;
-              setPresenceStatus("searching");
-              updateLobbyFromPresence();
+              if (status === "SUBSCRIBED") {
+                setPresenceStatus("searching");
+                updateLobbyFromPresence();
+                return;
+              }
+              if (status === "CHANNEL_ERROR") {
+                radarSub.textContent = "Multiplayer error. Please retry.";
+                scanning = false;
+              }
             });
         } else {
           setPresenceStatus("searching");
           updateLobbyFromPresence();
         }
+
+        if (scanPollId) clearInterval(scanPollId);
+        scanPollId = setInterval(() => {
+          if (!scanning || !lobbyChannel) return;
+          updateLobbyFromPresence();
+          maybeMatchmake();
+        }, 500);
       }
 
       function stopScanning() {
@@ -539,6 +564,10 @@
         leaderPayload = null;
         setRadar(false);
         if (lobbyChannel) setPresenceStatus("idle");
+        if (scanPollId) {
+          clearInterval(scanPollId);
+          scanPollId = null;
+        }
       }
 
       radarCancel.addEventListener("click", stopScanning);
