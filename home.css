@@ -25,6 +25,173 @@ body {
   overflow: hidden;
 }
 
+.name-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(3, 10, 18, 0.72);
+}
+
+.name-modal[hidden] {
+  display: none !important;
+}
+
+.name-card {
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(6, 20, 33, 0.96);
+  padding: 1rem;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45);
+}
+
+.name-card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.name-sub {
+  margin: 0.4rem 0 0.85rem;
+  color: var(--ink-soft);
+}
+
+.name-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+}
+
+.name-input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: inherit;
+  color: #ecfbff;
+  background: rgba(12, 31, 50, 0.92);
+  padding: 0.75rem 0.85rem;
+}
+
+.name-btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 0.75rem 0.95rem;
+  font: 800 0.95rem "Space Grotesk", sans-serif;
+  cursor: pointer;
+  background: linear-gradient(95deg, var(--accent), var(--accent-2));
+  color: #03121b;
+}
+
+.name-error {
+  min-height: 1.2rem;
+  margin: 0.65rem 0 0;
+  color: rgba(255, 120, 130, 0.95);
+}
+
+.radar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(3, 10, 18, 0.64);
+  backdrop-filter: blur(6px);
+}
+
+.radar-overlay[hidden] {
+  display: none !important;
+}
+
+.radar-card {
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(6, 20, 33, 0.96);
+  padding: 1rem;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.radar-visual {
+  width: min(320px, 70vw);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto 0.75rem;
+  position: relative;
+  border-radius: 999px;
+  border: 1px solid rgba(88, 243, 255, 0.28);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(88, 243, 255, 0.14), transparent 60%),
+    radial-gradient(circle at 50% 50%, rgba(135, 255, 169, 0.08), transparent 72%);
+  overflow: hidden;
+}
+
+.radar-ring {
+  position: absolute;
+  inset: 8%;
+  border-radius: 999px;
+  border: 1px dashed rgba(88, 243, 255, 0.18);
+  opacity: 0.7;
+}
+
+.radar-ring.ring-2 { inset: 22%; opacity: 0.55; }
+.radar-ring.ring-3 { inset: 36%; opacity: 0.4; }
+
+.radar-sweep {
+  position: absolute;
+  inset: -35%;
+  background: conic-gradient(
+    from 180deg,
+    rgba(88, 243, 255, 0) 0deg,
+    rgba(88, 243, 255, 0.0) 250deg,
+    rgba(88, 243, 255, 0.24) 300deg,
+    rgba(88, 243, 255, 0) 360deg
+  );
+  animation: sweep 1.35s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+.radar-blips {
+  position: absolute;
+  inset: 0;
+}
+
+.radar-blip {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(135, 255, 169, 0.75);
+  box-shadow: 0 0 14px rgba(135, 255, 169, 0.28);
+  animation: blip 1.6s ease-in-out infinite;
+}
+
+.radar-title {
+  margin: 0.15rem 0 0.2rem;
+  font-size: 1.35rem;
+}
+
+.radar-sub {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.radar-cancel {
+  margin-top: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.95rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font: 800 0.95rem "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.radar-cancel:hover {
+  box-shadow: 0 10px 24px rgba(88, 243, 255, 0.12);
+}
+
 .ghost-match {
   position: fixed;
   inset: -18vmin;
@@ -176,7 +343,7 @@ h1 {
 .action-row {
   margin-top: 1.05rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -198,6 +365,10 @@ h1 {
 
 .action-btn.duel {
   background: linear-gradient(95deg, #7ad7ff, #66ffd5);
+}
+
+.action-btn.multi {
+  background: linear-gradient(95deg, #b4a4ff, #66ffd5);
 }
 
 .tour-overlay {
@@ -320,6 +491,16 @@ h1 {
 @keyframes enter {
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blip {
+  0%, 100% { transform: scale(0.85); opacity: 0.4; }
+  50% { transform: scale(1); opacity: 1; }
 }
 
 @media (max-width: 620px) {

@@ -8,10 +8,38 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="home.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
     <div id="ghost-match" class="ghost-match" aria-hidden="true">
       <div id="ghost-grid" class="ghost-grid"></div>
+    </div>
+
+    <div id="name-modal" class="name-modal" role="dialog" aria-modal="true" aria-labelledby="name-title" hidden>
+      <div class="name-card">
+        <h2 id="name-title">Enter your name</h2>
+        <p class="name-sub">This name shows up in multiplayer matchmaking.</p>
+        <form id="name-form" class="name-form">
+          <input id="player-name" class="name-input" type="text" inputmode="text" autocomplete="nickname" maxlength="16" placeholder="Your name" required />
+          <button class="name-btn" type="submit">Continue</button>
+        </form>
+        <p id="name-error" class="name-error" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="radar-overlay" class="radar-overlay" hidden>
+      <div class="radar-card" role="status" aria-live="polite">
+        <div class="radar-visual" aria-hidden="true">
+          <div class="radar-sweep"></div>
+          <div class="radar-ring ring-1"></div>
+          <div class="radar-ring ring-2"></div>
+          <div class="radar-ring ring-3"></div>
+          <div class="radar-blips" id="radar-blips"></div>
+        </div>
+        <h2 class="radar-title">Scanning for players…</h2>
+        <p id="radar-sub" class="radar-sub">Hold tight. Match starts automatically.</p>
+        <button id="radar-cancel" class="radar-cancel" type="button">Cancel</button>
+      </div>
     </div>
 
     <main class="home-main">
@@ -42,6 +70,7 @@
         <div class="action-row">
           <button id="solo-btn" class="action-btn">Solo</button>
           <button id="duel-btn" class="action-btn duel">Duels (Bot)</button>
+          <button id="multi-btn" class="action-btn multi">Multiplayer</button>
         </div>
       </section>
     </main>
@@ -202,6 +231,317 @@
         ghostDims = rebuildGhostGrid();
         runGhostLoop(ghostDims);
       });
+
+      const SUPABASE_URL = "https://kqhgodyuzcxilurksigq.supabase.co";
+      const SUPABASE_KEY = "sb_publishable_vT7txYsSlcpDbOfOsuqh9Q_-aTrvWAU";
+
+      const NAME_KEY = "mindsnap_name_v1";
+      const CLIENT_KEY = "mindsnap_client_id_v1";
+
+      const nameModal = document.getElementById("name-modal");
+      const nameForm = document.getElementById("name-form");
+      const nameInput = document.getElementById("player-name");
+      const nameError = document.getElementById("name-error");
+
+      const radarOverlay = document.getElementById("radar-overlay");
+      const radarCancel = document.getElementById("radar-cancel");
+      const radarSub = document.getElementById("radar-sub");
+      const radarBlips = document.getElementById("radar-blips");
+
+      const MIN_SCAN_MS = 3000;
+      const MATCH_START_DELAY_MS = 1200;
+
+      function safeName(raw) {
+        const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
+        return trimmed.slice(0, 16);
+      }
+
+      function ensureClientId() {
+        let id = localStorage.getItem(CLIENT_KEY);
+        if (id) return id;
+        try {
+          id = crypto.randomUUID();
+        } catch {
+          id = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+        }
+        localStorage.setItem(CLIENT_KEY, id);
+        return id;
+      }
+
+      function ensureName() {
+        const existing = localStorage.getItem(NAME_KEY);
+        if (existing && safeName(existing)) return safeName(existing);
+        return null;
+      }
+
+      function openNameModal() {
+        nameModal.hidden = false;
+        nameInput.value = "";
+        nameInput.focus();
+      }
+
+      function closeNameModal() {
+        nameModal.hidden = true;
+      }
+
+      const clientId = ensureClientId();
+      let playerName = ensureName();
+      if (!playerName) openNameModal();
+
+      nameForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const value = safeName(nameInput.value);
+        if (!value) {
+          nameError.textContent = "Please enter a name.";
+          return;
+        }
+        playerName = value;
+        localStorage.setItem(NAME_KEY, playerName);
+        nameError.textContent = "";
+        closeNameModal();
+      });
+
+      // Multiplayer (Supabase Realtime Presence + Broadcast)
+      let supa = null;
+      let lobbyChannel = null;
+      let lobbyState = new Map(); // clientId -> meta
+      let scanning = false;
+      let scanStartedAt = 0;
+      let matchCommitted = false;
+      let lastMatchId = null;
+      let leaderPayload = null;
+
+      function rebuildBlips() {
+        radarBlips.textContent = "";
+        const searching = Array.from(lobbyState.values()).filter((m) => m.status === "searching");
+        const count = clamp(searching.length, 0, 10);
+        for (let i = 0; i < count; i += 1) {
+          const blip = document.createElement("span");
+          blip.className = "radar-blip";
+          blip.style.left = `${10 + Math.random() * 80}%`;
+          blip.style.top = `${12 + Math.random() * 76}%`;
+          blip.style.animationDelay = `${Math.random() * 0.8}s`;
+          radarBlips.appendChild(blip);
+        }
+      }
+
+      function setRadar(open) {
+        radarOverlay.hidden = !open;
+        if (open) rebuildBlips();
+      }
+
+      function lobbyMetasFromPresenceState(stateObj) {
+        const metas = [];
+        for (const key of Object.keys(stateObj || {})) {
+          const entry = stateObj[key];
+          for (const meta of entry?.metas || []) {
+            metas.push(meta);
+          }
+        }
+        return metas;
+      }
+
+      function updateLobbyFromPresence() {
+        lobbyState.clear();
+        const metas = lobbyMetasFromPresenceState(lobbyChannel.presenceState());
+        for (const meta of metas) {
+          if (!meta?.clientId) continue;
+          lobbyState.set(meta.clientId, meta);
+        }
+        if (scanning) {
+          rebuildBlips();
+          maybeMatchmake();
+        }
+      }
+
+      function getSettings() {
+        const difficulty = document.getElementById("difficulty").value;
+        const duration = document.getElementById("duration").value;
+        return { difficulty, duration: Number(duration) };
+      }
+
+      function setPresenceStatus(status, extra = {}) {
+        if (!lobbyChannel) return;
+        lobbyChannel.track({
+          clientId,
+          name: playerName || "Player",
+          status,
+          settings: getSettings(),
+          updatedAt: new Date().toISOString(),
+          ...extra
+        });
+      }
+
+      function getSearchingIds() {
+        return Array.from(lobbyState.values())
+          .filter((m) => m.status === "searching" && m.clientId)
+          .map((m) => m.clientId)
+          .sort();
+      }
+
+      function pairForMe(ids) {
+        for (let i = 0; i + 1 < ids.length; i += 2) {
+          const a = ids[i];
+          const b = ids[i + 1];
+          if (a === clientId) return { leader: a, other: b };
+          if (b === clientId) return { leader: a, other: b };
+        }
+        return null;
+      }
+
+      async function waitForMinScan() {
+        const elapsed = Date.now() - scanStartedAt;
+        const remaining = Math.max(0, MIN_SCAN_MS - elapsed);
+        if (remaining > 0) await sleep(remaining);
+      }
+
+      function navigateToPvP(startPayload) {
+        const { matchId, seed, startAt, difficulty, duration, p1, p2 } = startPayload;
+        const q = new URLSearchParams({
+          mode: "pvp",
+          matchId,
+          seed: String(seed),
+          startAt: String(startAt),
+          difficulty,
+          duration: String(duration),
+          p1: `${p1.clientId}|${p1.name}`,
+          p2: `${p2.clientId}|${p2.name}`
+        });
+        window.location.href = `mind_snap.html?${q.toString()}`;
+      }
+
+      async function commitMatch(startPayload) {
+        if (matchCommitted) return;
+        matchCommitted = true;
+        lastMatchId = startPayload.matchId;
+        radarSub.textContent = "Match found. Synchronizing…";
+        setPresenceStatus("in_match", { matchId: startPayload.matchId });
+        await waitForMinScan();
+        navigateToPvP(startPayload);
+      }
+
+      function makeMatchStartPayload(leaderId, otherId) {
+        const leaderMeta = lobbyState.get(leaderId);
+        const otherMeta = lobbyState.get(otherId);
+        const settings = leaderMeta?.settings || getSettings();
+        const now = Date.now();
+        const matchId = crypto?.randomUUID?.() || `m_${now}_${Math.random().toString(16).slice(2)}`;
+        const seed = Math.floor(Math.random() * 0x7fffffff);
+        return {
+          matchId,
+          seed,
+          startAt: now + MATCH_START_DELAY_MS,
+          difficulty: settings.difficulty || "medium",
+          duration: Number(settings.duration || 60),
+          p1: { clientId: leaderId, name: leaderMeta?.name || "Player 1" },
+          p2: { clientId: otherId, name: otherMeta?.name || "Player 2" }
+        };
+      }
+
+      async function maybeMatchmake() {
+        if (!scanning || matchCommitted) return;
+        const searchingIds = getSearchingIds();
+        const pair = pairForMe(searchingIds);
+        if (!pair) return;
+
+        // If I'm the leader, broadcast match_start exactly once per pairing.
+        if (pair.leader === clientId && !lastMatchId) {
+          const payload = makeMatchStartPayload(pair.leader, pair.other);
+          lastMatchId = payload.matchId;
+          leaderPayload = payload;
+          await lobbyChannel.send({
+            type: "broadcast",
+            event: "match_start",
+            payload
+          });
+          // local fast-path
+          commitMatch(payload);
+          return;
+        }
+
+        // Non-leader: nudge the leader in case the initial broadcast is delayed/missed.
+        if (pair.leader !== clientId && !lastMatchId) {
+          lastMatchId = "waiting";
+          setTimeout(() => {
+            if (!scanning || matchCommitted) return;
+            lobbyChannel.send({
+              type: "broadcast",
+              event: "match_request",
+              payload: { from: clientId, to: pair.leader }
+            });
+          }, 380);
+          setTimeout(() => {
+            if (lastMatchId === "waiting" && !matchCommitted) lastMatchId = null;
+          }, 2200);
+        }
+      }
+
+      async function startScanning() {
+        if (scanning) return;
+        if (!playerName) {
+          openNameModal();
+          return;
+        }
+
+        scanning = true;
+        matchCommitted = false;
+        lastMatchId = null;
+        leaderPayload = null;
+        scanStartedAt = Date.now();
+        setRadar(true);
+        radarSub.textContent = "Hold tight. Match starts automatically.";
+
+        if (!supa) {
+          const { createClient } = supabase;
+          supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+        }
+
+        if (!lobbyChannel) {
+          lobbyChannel = supa.channel("mindsnap:lobby", {
+            config: {
+              broadcast: { self: true, ack: true },
+              presence: { key: clientId }
+            }
+          });
+
+          lobbyChannel
+            .on("presence", { event: "sync" }, updateLobbyFromPresence)
+            .on("presence", { event: "join" }, updateLobbyFromPresence)
+            .on("presence", { event: "leave" }, updateLobbyFromPresence)
+            .on("broadcast", { event: "match_start" }, ({ payload }) => {
+              if (!scanning || matchCommitted) return;
+              const p1 = payload?.p1?.clientId;
+              const p2 = payload?.p2?.clientId;
+              if (p1 !== clientId && p2 !== clientId) return;
+              commitMatch(payload);
+            })
+            .on("broadcast", { event: "match_request" }, async ({ payload }) => {
+              if (!scanning || matchCommitted) return;
+              if (!payload || payload.to !== clientId) return;
+              if (!leaderPayload) return;
+              await lobbyChannel.send({ type: "broadcast", event: "match_start", payload: leaderPayload });
+            })
+            .subscribe(async (status) => {
+              if (status !== "SUBSCRIBED") return;
+              setPresenceStatus("searching");
+              updateLobbyFromPresence();
+            });
+        } else {
+          setPresenceStatus("searching");
+          updateLobbyFromPresence();
+        }
+      }
+
+      function stopScanning() {
+        scanning = false;
+        matchCommitted = false;
+        lastMatchId = null;
+        leaderPayload = null;
+        setRadar(false);
+        if (lobbyChannel) setPresenceStatus("idle");
+      }
+
+      radarCancel.addEventListener("click", stopScanning);
 
       function launch(mode) {
         const difficulty = document.getElementById("difficulty").value;
@@ -368,6 +708,7 @@
 
       document.getElementById("solo-btn").addEventListener("click", () => launch("solo"));
       document.getElementById("duel-btn").addEventListener("click", () => launch("duel"));
+      document.getElementById("multi-btn").addEventListener("click", startScanning);
     </script>
   </body>
 </html>

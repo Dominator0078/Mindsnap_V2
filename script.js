@@ -18,7 +18,8 @@ const BOT_BASE = {
 };
 
 const params = new URLSearchParams(window.location.search);
-const mode = params.get("mode") === "duel" ? "duel" : "solo";
+const rawMode = params.get("mode");
+const mode = rawMode === "duel" ? "duel" : rawMode === "pvp" ? "pvp" : "solo";
 const difficultyKey = DIFFICULTY[params.get("difficulty")] ? params.get("difficulty") : "medium";
 const rawDuration = Number(params.get("duration"));
 const duration = Number.isFinite(rawDuration) ? clamp(Math.round(rawDuration), 60, 120) : 60;
@@ -39,9 +40,31 @@ const resultBodyEl = document.getElementById("resultBody");
 const restartBtn = document.getElementById("restartBtn");
 const playAgainBtn = document.getElementById("playAgainBtn");
 
-modeLabelEl.textContent = mode === "duel" ? "Duels (Bot)" : "Solo";
+modeLabelEl.textContent = mode === "duel" ? "Duels (Bot)" : mode === "pvp" ? "Multiplayer" : "Solo";
 difficultyLabelEl.textContent = difficultyKey[0].toUpperCase() + difficultyKey.slice(1);
-if (mode !== "duel") botCardEl.style.display = "none";
+if (mode === "solo") botCardEl.style.display = "none";
+
+const playerNameKey = "mindsnap_name_v1";
+const clientIdKey = "mindsnap_client_id_v1";
+let localClientId = localStorage.getItem(clientIdKey) || "";
+const localPlayerName = (localStorage.getItem(playerNameKey) || "You").trim() || "You";
+
+if (!localClientId) {
+  try {
+    localClientId = crypto.randomUUID();
+  } catch {
+    localClientId = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  }
+  try {
+    localStorage.setItem(clientIdKey, localClientId);
+  } catch {
+    /* ignore */
+  }
+}
+
+const opponentNameEl = botCardEl?.querySelector("h2") || null;
+const playerNameEl = document.querySelector(".score-card h2") || null;
+if (playerNameEl && mode === "pvp") playerNameEl.textContent = localPlayerName;
 
 boardEl?.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -76,11 +99,28 @@ function getTargetCount(gridSize) {
 const MAX_GRID = 7;
 const shuffleBuf = new Int32Array(MAX_GRID * MAX_GRID);
 
-function fillPattern(totalTiles, count, outSet) {
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function rand32() {
+    a |= 0;
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function rngForPattern(patternNumber) {
+  if (!state?.pvp?.enabled) return Math.random;
+  const seed = (state.pvp.seed ^ Math.imul(patternNumber, 0x9E3779B1)) >>> 0;
+  return mulberry32(seed);
+}
+
+function fillPattern(totalTiles, count, outSet, rng) {
   outSet.clear();
   for (let i = 0; i < totalTiles; i += 1) shuffleBuf[i] = i;
   for (let i = totalTiles - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor((rng ? rng() : Math.random()) * (i + 1));
     const tmp = shuffleBuf[i];
     shuffleBuf[i] = shuffleBuf[j];
     shuffleBuf[j] = tmp;
@@ -119,6 +159,10 @@ try {
   botWorker = null;
 }
 
+// Supabase (Multiplayer)
+const SUPABASE_URL = "https://kqhgodyuzcxilurksigq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_vT7txYsSlcpDbOfOsuqh9Q_-aTrvWAU";
+
 const state = {
   live: false,
   timeLeft: duration,
@@ -151,8 +195,47 @@ const state = {
     clicks: 0,
     correct: 0,
     wrong: 0
+  },
+  pvp: {
+    enabled: mode === "pvp",
+    matchId: params.get("matchId") || null,
+    seed: Number(params.get("seed") || 0) || 0,
+    startAtMs: Number(params.get("startAt") || 0) || 0,
+    channel: null,
+    opponentId: null,
+    opponentName: null,
+    opponentScore: 0,
+    opponentFinal: null,
+    myFinal: null,
+    scoreSendId: null,
+    started: false
   }
 };
+
+function parsePlayerToken(token) {
+  const raw = String(token || "");
+  const [id, ...nameParts] = raw.split("|");
+  return { clientId: id || null, name: (nameParts.join("|") || "").trim() || null };
+}
+
+if (state.pvp.enabled) {
+  const p1 = parsePlayerToken(params.get("p1"));
+  const p2 = parsePlayerToken(params.get("p2"));
+  const meId = localClientId;
+
+  const me = p1.clientId === meId ? p1 : p2.clientId === meId ? p2 : null;
+  const opp = me === p1 ? p2 : me === p2 ? p1 : p1.clientId && p1.clientId !== meId ? p1 : p2;
+
+  state.pvp.opponentId = opp?.clientId || null;
+  state.pvp.opponentName = opp?.name || "Opponent";
+
+  if (opponentNameEl) opponentNameEl.textContent = state.pvp.opponentName;
+  if (botScoreEl) botScoreEl.textContent = "0";
+
+  // In multiplayer, treat restart as exit.
+  restartBtn.textContent = "Exit";
+  playAgainBtn.textContent = "Back to Home";
+}
 
 function clearBoard() {
   boardEl.textContent = "";
@@ -204,7 +287,128 @@ function resetTileMarks() {
 function updateHud() {
   timerEl.textContent = String(state.timeLeft);
   playerScoreEl.textContent = String(state.player.totalScore);
-  botScoreEl.textContent = String(state.bot.totalScore);
+  botScoreEl.textContent = String(mode === "pvp" ? state.pvp.opponentScore : state.bot.totalScore);
+
+  if (state.pvp.enabled && state.live) schedulePvPScoreSend();
+}
+
+function schedulePvPScoreSend() {
+  if (!state.pvp.enabled || !state.pvp.channel) return;
+  if (state.pvp.scoreSendId) return;
+  state.pvp.scoreSendId = setTimeout(() => {
+    state.pvp.scoreSendId = null;
+    sendPvPScore();
+  }, 250);
+}
+
+function sendPvPScore() {
+  if (!state.pvp.enabled || !state.pvp.channel) return;
+  state.pvp.channel.send({
+    type: "broadcast",
+    event: "score",
+    payload: {
+      matchId: state.pvp.matchId,
+      clientId: localClientId,
+      name: localPlayerName,
+      score: state.player.totalScore,
+      patternsPlayed: state.player.patternCount,
+      timeLeft: state.timeLeft
+    }
+  });
+}
+
+function sendPvPFinal() {
+  if (!state.pvp.enabled || !state.pvp.channel) return;
+  state.pvp.myFinal = state.player.totalScore;
+  state.pvp.channel.send({
+    type: "broadcast",
+    event: "final",
+    payload: {
+      matchId: state.pvp.matchId,
+      clientId: localClientId,
+      name: localPlayerName,
+      score: state.player.totalScore
+    }
+  });
+}
+
+function endPvPBecauseLeft() {
+  if (!state.pvp.enabled || !state.live) return;
+  state.live = false;
+  cancelAnimationFrame(state.rafId);
+  clearTimeout(state.player.pauseId);
+  clearTimeout(state.player.nextId);
+  setAllTilesDisabled(true);
+  setBoardLoading(false);
+
+  resultModeEl.textContent = "Multiplayer Result";
+  resultTitleEl.textContent = "Opponent Left";
+  resultBodyEl.textContent = `Final score: ${state.player.totalScore}`;
+  overlayEl.classList.add("show");
+
+  state.endedAt = new Date().toISOString();
+  stashPendingEnd(buildEndPayload());
+  reportMatchEnd();
+}
+
+function initPvPRealtime() {
+  if (!state.pvp.enabled || !state.pvp.matchId) return;
+  if (state.pvp.channel) return;
+  if (typeof supabase === "undefined") return;
+
+  const { createClient } = supabase;
+  const supa = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const channel = supa.channel(`mindsnap:match:${state.pvp.matchId}`, {
+    config: {
+      broadcast: { self: true, ack: false },
+      presence: { key: localClientId }
+    }
+  });
+
+  channel
+    .on("broadcast", { event: "score" }, ({ payload }) => {
+      if (!payload || payload.clientId === localClientId) return;
+      state.pvp.opponentScore = Number(payload.score || 0);
+      if (payload.name) {
+        state.pvp.opponentName = String(payload.name);
+        if (opponentNameEl) opponentNameEl.textContent = state.pvp.opponentName;
+      }
+      updateHud();
+    })
+    .on("broadcast", { event: "final" }, ({ payload }) => {
+      if (!payload || payload.clientId === localClientId) return;
+      state.pvp.opponentFinal = Number(payload.score || 0);
+      state.pvp.opponentScore = state.pvp.opponentFinal;
+      updateHud();
+      if (!state.live && overlayEl.classList.contains("show")) {
+        // Update winner text if overlay is already visible.
+        const you = state.player.totalScore;
+        const opp = state.pvp.opponentFinal;
+        resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
+        resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
+      }
+    })
+    .on("broadcast", { event: "leave" }, ({ payload }) => {
+      if (!payload || payload.clientId === localClientId) return;
+      endPvPBecauseLeft();
+    })
+    .on("presence", { event: "leave" }, ({ leftPresences }) => {
+      const left = Array.isArray(leftPresences) ? leftPresences : [];
+      const oppId = state.pvp.opponentId;
+      if (!oppId) return;
+      if (left.some((m) => m?.clientId === oppId)) endPvPBecauseLeft();
+    })
+    .subscribe(async (status) => {
+      if (status !== "SUBSCRIBED") return;
+      await channel.track({ clientId: localClientId, name: localPlayerName, online_at: new Date().toISOString() });
+    });
+
+  // Best-effort: signal leave before unload (presence will also drop).
+  document.addEventListener("pagehide", () => {
+    channel.send({ type: "broadcast", event: "leave", payload: { clientId: localClientId } });
+  });
+
+  state.pvp.channel = channel;
 }
 
 function setBoardLoading(loading) {
@@ -246,7 +450,7 @@ function createPatternState(patternNumber) {
   const targetCount = getTargetCount(gridSize);
 
   pool.reset();
-  fillPattern(totalTiles, targetCount, pool.targets);
+  fillPattern(totalTiles, targetCount, pool.targets, rngForPattern(patternNumber));
 
   return {
     patternNumber,
@@ -370,7 +574,7 @@ function startBotPattern() {
   const targetCount = getTargetCount(gridSize);
 
   botPool.reset();
-  fillPattern(totalTiles, targetCount, botPool.targets);
+  fillPattern(totalTiles, targetCount, botPool.targets, Math.random);
 
   const profile = getBotProfile();
   state.bot.current = {
@@ -440,9 +644,17 @@ function finishBotPattern() {
 
 function buildEndPayload() {
   const you = state.player.totalScore;
-  const bot = state.bot.totalScore;
+  const otherScore = mode === "pvp" ? state.pvp.opponentScore : state.bot.totalScore;
   const winner =
-    mode !== "duel" ? "you" : you === bot ? "draw" : you > bot ? "you" : "bot";
+    mode === "solo"
+      ? "you"
+      : you === otherScore
+        ? "draw"
+        : you > otherScore
+          ? "you"
+          : mode === "pvp"
+            ? "opponent"
+            : "bot";
 
   return {
     matchId: state.clientMatchId,
@@ -452,7 +664,7 @@ function buildEndPayload() {
     startedAt: state.startedAt,
     endedAt: state.endedAt,
     playerScore: you,
-    botScore: mode === "duel" ? bot : null,
+    botScore: mode === "solo" ? null : otherScore,
     winner,
     patternsPlayed: state.player.patternCount,
     stats: {
@@ -531,14 +743,22 @@ function endMatch() {
   setAllTilesDisabled(true);
   setBoardLoading(false);
 
-  resultModeEl.textContent = mode === "duel" ? "Duel Result" : "Solo Result";
-
   if (mode === "duel") {
+    resultModeEl.textContent = "Duel Result";
     const you = state.player.totalScore;
     const bot = state.bot.totalScore;
     resultTitleEl.textContent = you === bot ? "Draw" : you > bot ? "You Win" : "Bot Wins";
     resultBodyEl.textContent = `You: ${you} | Bot: ${bot}`;
+  } else if (mode === "pvp") {
+    resultModeEl.textContent = "Multiplayer Result";
+    sendPvPFinal();
+
+    const you = state.player.totalScore;
+    const opp = state.pvp.opponentFinal != null ? state.pvp.opponentFinal : state.pvp.opponentScore;
+    resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
+    resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
   } else {
+    resultModeEl.textContent = "Solo Result";
     resultTitleEl.textContent = "Time Up";
     resultBodyEl.textContent = `Final score: ${state.player.totalScore}`;
   }
@@ -565,12 +785,16 @@ function resetMatch() {
   clearTimeout(state.bot.nextId);
   clearTimeout(state.bot.clickId);
 
-  state.live = true;
+  initPvPRealtime();
+
+  state.live = mode !== "pvp";
   state.timeLeft = duration;
   state.reported = false;
-  state.startedAt = new Date().toISOString();
+  state.startedAt = mode === "pvp" && state.pvp.startAtMs
+    ? new Date(state.pvp.startAtMs).toISOString()
+    : new Date().toISOString();
   state.endedAt = null;
-  state.clientMatchId = makeClientMatchId();
+  state.clientMatchId = mode === "pvp" && state.pvp.matchId ? state.pvp.matchId : makeClientMatchId();
   state.pendingEndPayload = null;
 
   state.player.totalScore = 0;
@@ -590,6 +814,22 @@ function resetMatch() {
   overlayEl.classList.remove("show");
   setBoardLoading(false);
   updateHud();
+
+  if (mode === "pvp") {
+    // Wait until the synchronized start timestamp.
+    const delay = Math.max(0, state.pvp.startAtMs - Date.now());
+    setAllTilesDisabled(true);
+    setTimeout(() => {
+      if (mode !== "pvp") return;
+      state.live = true;
+      state.pvp.started = true;
+      startTimer();
+      startPlayerPattern();
+      updateHud();
+    }, delay);
+    return;
+  }
+
   startTimer();
   startPlayerPattern();
   if (mode === "duel") startBotPattern();
@@ -629,8 +869,17 @@ window.addEventListener("beforeunload", (e) => {
 
 flushPendingFromStorage();
 
-restartBtn.addEventListener("click", resetMatch);
-playAgainBtn.addEventListener("click", resetMatch);
+function exitToHome() {
+  try {
+    state.pvp.channel?.send({ type: "broadcast", event: "leave", payload: { clientId: localClientId } });
+  } catch {
+    /* ignore */
+  }
+  window.location.href = "index.html";
+}
+
+restartBtn.addEventListener("click", mode === "pvp" ? exitToHome : resetMatch);
+playAgainBtn.addEventListener("click", mode === "pvp" ? exitToHome : resetMatch);
 resetMatch();
 
 // Inline bot fallback (kept minimal).
