@@ -304,32 +304,50 @@ function schedulePvPScoreSend() {
 
 function sendPvPScore() {
   if (!state.pvp.enabled || !state.pvp.channel) return;
+  const payload = {
+    matchId: state.pvp.matchId,
+    clientId: localClientId,
+    name: localPlayerName,
+    score: state.player.totalScore,
+    patternsPlayed: state.player.patternCount,
+    timeLeft: state.timeLeft
+  };
+
   state.pvp.channel.send({
     type: "broadcast",
     event: "score",
-    payload: {
-      matchId: state.pvp.matchId,
-      clientId: localClientId,
-      name: localPlayerName,
-      score: state.player.totalScore,
-      patternsPlayed: state.player.patternCount,
-      timeLeft: state.timeLeft
-    }
+    payload
+  });
+
+  // Compatibility with older modules/guides.
+  state.pvp.channel.send({
+    type: "broadcast",
+    event: "score_update",
+    payload: { from: localClientId, score: state.player.totalScore, timestamp: Date.now() }
   });
 }
 
 function sendPvPFinal() {
   if (!state.pvp.enabled || !state.pvp.channel) return;
   state.pvp.myFinal = state.player.totalScore;
+  const payload = {
+    matchId: state.pvp.matchId,
+    clientId: localClientId,
+    name: localPlayerName,
+    score: state.player.totalScore
+  };
+
   state.pvp.channel.send({
     type: "broadcast",
     event: "final",
-    payload: {
-      matchId: state.pvp.matchId,
-      clientId: localClientId,
-      name: localPlayerName,
-      score: state.player.totalScore
-    }
+    payload
+  });
+
+  // Compatibility with older modules/guides.
+  state.pvp.channel.send({
+    type: "broadcast",
+    event: "match_end",
+    payload: { from: localClientId, finalScore: state.player.totalScore, timestamp: Date.now() }
   });
 }
 
@@ -376,6 +394,12 @@ function initPvPRealtime() {
       }
       updateHud();
     })
+    .on("broadcast", { event: "score_update" }, ({ payload }) => {
+      if (!payload || payload.from === localClientId) return;
+      if (state.pvp.opponentId && payload.from !== state.pvp.opponentId) return;
+      state.pvp.opponentScore = Number(payload.score || 0);
+      updateHud();
+    })
     .on("broadcast", { event: "final" }, ({ payload }) => {
       if (!payload || payload.clientId === localClientId) return;
       state.pvp.opponentFinal = Number(payload.score || 0);
@@ -388,6 +412,13 @@ function initPvPRealtime() {
         resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
         resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
       }
+    })
+    .on("broadcast", { event: "match_end" }, ({ payload }) => {
+      if (!payload || payload.from === localClientId) return;
+      if (state.pvp.opponentId && payload.from !== state.pvp.opponentId) return;
+      state.pvp.opponentFinal = Number(payload.finalScore || 0);
+      state.pvp.opponentScore = state.pvp.opponentFinal;
+      updateHud();
     })
     .on("broadcast", { event: "leave" }, ({ payload }) => {
       if (!payload || payload.clientId === localClientId) return;
