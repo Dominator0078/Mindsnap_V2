@@ -36,8 +36,20 @@ async function readMatches() {
   }
 }
 
-async function writeMatches(matches) {
-  await fsp.writeFile(MATCH_FILE, JSON.stringify(matches, null, 2), "utf8");
+async function writeMatchesAtomic(matches) {
+  const tmp = `${MATCH_FILE}.tmp`;
+  await fsp.writeFile(tmp, JSON.stringify(matches, null, 2), "utf8");
+  try {
+    await fsp.rename(tmp, MATCH_FILE);
+  } catch (err) {
+    // Some Windows setups may fail to replace an existing file. Retry once.
+    try {
+      await fsp.unlink(MATCH_FILE);
+    } catch {
+      /* ignore */
+    }
+    await fsp.rename(tmp, MATCH_FILE);
+  }
 }
 
 /*
@@ -104,41 +116,6 @@ ensureStorage();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === "POST" && url.pathname === "/api/match/start") {
-    try {
-      const body = await collectBody(req);
-      const payload = JSON.parse(body || "{}");
-
-      const matchId = crypto.randomUUID();
-      await enqueueWrite(async () => {
-        const match = {
-          matchId,
-          ip: getClientIp(req),
-          userAgent: req.headers["user-agent"] || null,
-          mode: String(payload.mode || "solo"),
-          difficulty: String(payload.difficulty || "medium"),
-          duration: Number(payload.duration || 60),
-          startedAt: payload.startedAt || new Date().toISOString(),
-          endedAt: null,
-          playerScore: null,
-          botScore: null,
-          winner: null,
-          patternsPlayed: null,
-          stats: null
-        };
-
-        const matches = await readMatches();
-        matches.push(match);
-        await writeMatches(matches);
-      });
-
-      sendJson(res, 200, { ok: true, matchId });
-    } catch {
-      sendJson(res, 400, { ok: false, message: "Invalid request payload." });
-    }
-    return;
-  }
-
   if (req.method === "POST" && url.pathname === "/api/match/end") {
     try {
       const body = await collectBody(req);
@@ -181,7 +158,7 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        await writeMatches(matches);
+        await writeMatchesAtomic(matches);
       });
 
       sendJson(res, 200, { ok: true });

@@ -237,6 +237,23 @@ body {
 @media (max-width: 980px) {
   .center-zone {
     grid-template-columns: 1fr;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .center-zone > .board-wrap {
+    grid-row: 1;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .center-zone > .score-card:first-of-type {
+    grid-row: 2;
+  }
+
+  #botCard {
+    grid-row: 3;
   }
 
   .score-card {
@@ -268,4 +285,3 @@ body {
     height: min(78vw, 78vh, 520px);
   }
 }
-

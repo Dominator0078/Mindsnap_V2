@@ -10,13 +10,8 @@
     <link rel="stylesheet" href="home.css" />
   </head>
   <body>
-    <div id="binary-rain" class="binary-rain" aria-hidden="true"></div>
-    <div class="equation-cloud" aria-hidden="true">
-      <span>f(x)=x^2+1</span>
-      <span>10110101</span>
-      <span>P(A|B)=P(B|A)P(A)/P(B)</span>
-      <span>01001111</span>
-      <span>sum(n)=n(n+1)/2</span>
+    <div id="ghost-match" class="ghost-match" aria-hidden="true">
+      <div id="ghost-grid" class="ghost-grid"></div>
     </div>
 
     <main class="home-main">
@@ -75,22 +70,138 @@
     </div>
 
     <script>
-      const rainRoot = document.getElementById("binary-rain");
-      function spawnBinaryColumn() {
-        const col = document.createElement("span");
-        col.className = "binary-col";
-        col.textContent = Array.from({ length: 28 }, () => (Math.random() > 0.5 ? "1" : "0")).join("");
-        col.style.left = `${Math.random() * 100}%`;
-        col.style.animationDuration = `${5 + Math.random() * 6}s`;
-        col.style.opacity = String(0.2 + Math.random() * 0.55);
-        rainRoot.appendChild(col);
-        setTimeout(() => col.remove(), 12500);
+      const ghostGrid = document.getElementById("ghost-grid");
+      const ghostMatch = document.getElementById("ghost-match");
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
       }
 
-      for (let i = 0; i < 30; i += 1) {
-        spawnBinaryColumn();
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
       }
-      setInterval(spawnBinaryColumn, 360);
+
+      function pickInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function rebuildGhostGrid() {
+        const w = Math.max(320, window.innerWidth || 0);
+        const h = Math.max(320, window.innerHeight || 0);
+
+        const cell = Math.max(34, Math.min(56, Math.round(Math.min(w, h) / 18)));
+        const cols = Math.max(10, Math.ceil((w * 1.3) / cell));
+        const rows = Math.max(12, Math.ceil((h * 1.3) / cell));
+
+        ghostGrid.style.setProperty("--cell", `${cell}px`);
+        ghostGrid.style.setProperty("--cols", String(cols));
+        ghostGrid.style.setProperty("--rows", String(rows));
+
+        const total = cols * rows;
+        ghostGrid.textContent = "";
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < total; i += 1) {
+          const tile = document.createElement("div");
+          tile.className = "ghost-tile";
+          frag.appendChild(tile);
+        }
+        ghostGrid.appendChild(frag);
+
+        return { cols, rows, total };
+      }
+
+      function indexFromRC(r, c, cols) {
+        return r * cols + c;
+      }
+
+      function neighbors(r, c, rows, cols) {
+        const out = [];
+        if (r > 0) out.push([r - 1, c]);
+        if (r + 1 < rows) out.push([r + 1, c]);
+        if (c > 0) out.push([r, c - 1]);
+        if (c + 1 < cols) out.push([r, c + 1]);
+        return out;
+      }
+
+      function pickCluster(size, rows, cols) {
+        const centerR = pickInt(0, rows - 1);
+        const centerC = pickInt(0, cols - 1);
+
+        const picked = new Set([indexFromRC(centerR, centerC, cols)]);
+        const frontier = [[centerR, centerC]];
+
+        while (picked.size < size && frontier.length > 0) {
+          const [r, c] = frontier.splice(pickInt(0, frontier.length - 1), 1)[0];
+          for (const [nr, nc] of neighbors(r, c, rows, cols)) {
+            if (picked.size >= size) break;
+            const idx = indexFromRC(nr, nc, cols);
+            if (picked.has(idx)) continue;
+            if (Math.random() < 0.62) {
+              picked.add(idx);
+              frontier.push([nr, nc]);
+            }
+          }
+        }
+
+        // Fallback: pad with random near-center tiles if the cluster didn't fill.
+        while (picked.size < size) {
+          const rr = clamp(centerR + pickInt(-2, 2), 0, rows - 1);
+          const cc = clamp(centerC + pickInt(-2, 2), 0, cols - 1);
+          picked.add(indexFromRC(rr, cc, cols));
+        }
+
+        return Array.from(picked);
+      }
+
+      function clearGhostMarks() {
+        const tiles = ghostGrid.children;
+        for (let i = 0; i < tiles.length; i += 1) {
+          tiles[i].classList.remove("is-preview", "is-correct");
+        }
+      }
+
+      let ghostRunId = 0;
+      async function runGhostLoop(dimensions) {
+        const runId = ++ghostRunId;
+        let { cols, rows } = dimensions;
+
+        while (runId === ghostRunId) {
+          if (document.visibilityState === "hidden") {
+            await sleep(250);
+            continue;
+          }
+
+          // Sync with current grid size in case of rebuilds.
+          cols = Number(ghostGrid.style.getPropertyValue("--cols")) || cols;
+          rows = Number(ghostGrid.style.getPropertyValue("--rows")) || rows;
+
+          const clusterSize = pickInt(4, 6);
+          const cluster = pickCluster(clusterSize, rows, cols);
+          const tiles = ghostGrid.children;
+
+          // Preview flash (pattern shown)
+          for (const idx of cluster) tiles[idx]?.classList.add("is-preview");
+          await sleep(1500);
+          for (const idx of cluster) tiles[idx]?.classList.remove("is-preview");
+
+          // Correct taps one-by-one (pattern recalled)
+          for (const idx of cluster) {
+            tiles[idx]?.classList.add("is-correct");
+            await sleep(pickInt(90, 140));
+          }
+
+          await sleep(1000);
+          clearGhostMarks();
+          await sleep(pickInt(220, 420));
+        }
+      }
+
+      let ghostDims = rebuildGhostGrid();
+      runGhostLoop(ghostDims);
+      window.addEventListener("resize", () => {
+        ghostDims = rebuildGhostGrid();
+        runGhostLoop(ghostDims);
+      });
 
       function launch(mode) {
         const difficulty = document.getElementById("difficulty").value;

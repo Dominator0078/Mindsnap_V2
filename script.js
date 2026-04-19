@@ -481,6 +481,26 @@ function clearPendingEnd() {
   }
 }
 
+async function flushPendingFromStorage() {
+  try {
+    const raw = localStorage.getItem(PENDING_END_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    if (!payload?.endedAt) return;
+
+    const res = await fetch("/api/match/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) return;
+
+    localStorage.removeItem(PENDING_END_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function reportMatchEnd() {
   if (state.reported || !state.pendingEndPayload) return;
   state.reported = true;
@@ -494,19 +514,6 @@ async function reportMatchEnd() {
     clearPendingEnd();
   } catch {
     state.reported = false;
-  }
-}
-
-function tryFlushPendingFromStorage() {
-  try {
-    const raw = localStorage.getItem(PENDING_END_KEY);
-    if (!raw) return;
-    const payload = JSON.parse(raw);
-    if (!payload?.endedAt) return;
-    state.pendingEndPayload = payload;
-    reportMatchEnd();
-  } catch {
-    /* ignore */
   }
 }
 
@@ -545,6 +552,9 @@ function endMatch() {
 }
 
 function resetMatch() {
+  // If the previous match ended but couldn't upload, retry now (without waiting for a page reload).
+  flushPendingFromStorage();
+
   matchEpoch += 1;
   botWorker?.postMessage({ type: "stop" });
 
@@ -617,7 +627,7 @@ window.addEventListener("beforeunload", (e) => {
   e.returnValue = "";
 });
 
-tryFlushPendingFromStorage();
+flushPendingFromStorage();
 
 restartBtn.addEventListener("click", resetMatch);
 playAgainBtn.addEventListener("click", resetMatch);
