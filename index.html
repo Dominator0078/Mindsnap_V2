@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindSnap</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="home.css" />
+  </head>
+  <body>
+    <div id="binary-rain" class="binary-rain" aria-hidden="true"></div>
+    <div class="equation-cloud" aria-hidden="true">
+      <span>f(x)=x^2+1</span>
+      <span>10110101</span>
+      <span>P(A|B)=P(B|A)P(A)/P(B)</span>
+      <span>01001111</span>
+      <span>sum(n)=n(n+1)/2</span>
+    </div>
+
+    <main class="home-main">
+      <section class="home-card">
+        <div class="card-top">
+          <p class="eyebrow">MEMORY GRID CHALLENGE</p>
+          <button id="help-btn" class="help-btn" type="button" aria-label="How to play MindSnap">?</button>
+        </div>
+        <h1>MindSnap</h1>
+        <p class="tagline">Memorize. Tap. Climb. Choose solo focus or duel against a variable bot.</p>
+
+        <div class="setting-grid">
+          <label class="setting">
+            <span>Difficulty</span>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+
+          <label class="setting">
+            <span>Game Time</span>
+            <input id="duration" type="number" min="60" max="120" step="1" value="60" />
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button id="solo-btn" class="action-btn">Solo</button>
+          <button id="duel-btn" class="action-btn duel">Duels (Bot)</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="tour-overlay" class="tour-overlay" hidden>
+      <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+        <div class="tour-head">
+          <h2 id="tour-title">How To Play MindSnap</h2>
+          <button id="tour-close" class="tour-close" type="button" aria-label="Close tutorial">x</button>
+        </div>
+        <div id="tour-stage" class="tour-stage">
+          <img src="onboarding.png" alt="MindSnap gameplay visual guide" />
+          <div id="tour-dim-top" class="tour-dim top"></div>
+          <div id="tour-dim-right" class="tour-dim right"></div>
+          <div id="tour-dim-bottom" class="tour-dim bottom"></div>
+          <div id="tour-dim-left" class="tour-dim left"></div>
+          <div id="tour-focus" class="tour-focus"></div>
+        </div>
+        <p id="tour-caption" class="tour-caption"></p>
+        <div class="tour-controls">
+          <button id="tour-prev" type="button" class="tour-btn ghost">Back</button>
+          <span id="tour-step" class="tour-step"></span>
+          <button id="tour-next" type="button" class="tour-btn">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const rainRoot = document.getElementById("binary-rain");
+      function spawnBinaryColumn() {
+        const col = document.createElement("span");
+        col.className = "binary-col";
+        col.textContent = Array.from({ length: 28 }, () => (Math.random() > 0.5 ? "1" : "0")).join("");
+        col.style.left = `${Math.random() * 100}%`;
+        col.style.animationDuration = `${5 + Math.random() * 6}s`;
+        col.style.opacity = String(0.2 + Math.random() * 0.55);
+        rainRoot.appendChild(col);
+        setTimeout(() => col.remove(), 12500);
+      }
+
+      for (let i = 0; i < 30; i += 1) {
+        spawnBinaryColumn();
+      }
+      setInterval(spawnBinaryColumn, 360);
+
+      function launch(mode) {
+        const difficulty = document.getElementById("difficulty").value;
+        const duration = document.getElementById("duration").value;
+        const target = `mind_snap.html?mode=${encodeURIComponent(mode)}&difficulty=${encodeURIComponent(difficulty)}&duration=${encodeURIComponent(duration)}`;
+        window.location.href = target;
+      }
+
+      const tourOverlay = document.getElementById("tour-overlay");
+      const tourStage = document.getElementById("tour-stage");
+      const tourImage = tourStage.querySelector("img");
+      const tourFocus = document.getElementById("tour-focus");
+      const tourCaption = document.getElementById("tour-caption");
+      const tourStep = document.getElementById("tour-step");
+      const tourPrev = document.getElementById("tour-prev");
+      const tourNext = document.getElementById("tour-next");
+      const tourClose = document.getElementById("tour-close");
+      const helpBtn = document.getElementById("help-btn");
+      const dimTop = document.getElementById("tour-dim-top");
+      const dimRight = document.getElementById("tour-dim-right");
+      const dimBottom = document.getElementById("tour-dim-bottom");
+      const dimLeft = document.getElementById("tour-dim-left");
+
+      const steps = [
+        {
+          caption: "This top strip is the current game stats. Track mode, difficulty, and time left.",
+          rect: { x: 0.5, y: 1, w: 99, h: 13 }
+        },
+        {
+          caption: "This is your player card. Your final score grows pattern by pattern.",
+          rect: { x: 0.5, y: 14, w: 23, h: 78 }
+        },
+        {
+          caption: "This center board is the memory arena. Pattern flashes, then you tap from memory.",
+          rect: { x: 25, y: 14, w: 50, h: 78 }
+        },
+        {
+          caption: "This is the bot card in duels mode. Beat this score before time runs out.",
+          rect: { x: 76.5, y: 14, w: 23, h: 78 }
+        },
+        {
+          caption: "How to play: memorize blue pattern -> tap with limited clicks -> correct +2, wrong -1 -> each pattern adds max(0, raw) to total.",
+          rect: { x: 0.5, y: 1, w: 99, h: 98 }
+        }
+      ];
+
+      let currentStep = 0;
+
+      function getImageFrameRect() {
+        const stage = tourStage.getBoundingClientRect();
+        const naturalW = tourImage.naturalWidth || stage.width;
+        const naturalH = tourImage.naturalHeight || stage.height;
+
+        if (!naturalW || !naturalH) {
+          return { x: 0, y: 0, w: stage.width, h: stage.height, stageW: stage.width, stageH: stage.height };
+        }
+
+        const stageRatio = stage.width / stage.height;
+        const imageRatio = naturalW / naturalH;
+
+        let drawW = stage.width;
+        let drawH = stage.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (stageRatio > imageRatio) {
+          drawH = stage.height;
+          drawW = drawH * imageRatio;
+          offsetX = (stage.width - drawW) / 2;
+        } else {
+          drawW = stage.width;
+          drawH = drawW / imageRatio;
+          offsetY = (stage.height - drawH) / 2;
+        }
+
+        return { x: offsetX, y: offsetY, w: drawW, h: drawH, stageW: stage.width, stageH: stage.height };
+      }
+
+      function applyStep(index) {
+        const safeIndex = Math.max(0, Math.min(index, steps.length - 1));
+        currentStep = safeIndex;
+        const step = steps[currentStep];
+        const frame = getImageFrameRect();
+
+        const x = frame.x + (step.rect.x / 100) * frame.w;
+        const y = frame.y + (step.rect.y / 100) * frame.h;
+        const w = (step.rect.w / 100) * frame.w;
+        const h = (step.rect.h / 100) * frame.h;
+
+        tourFocus.style.left = `${x}px`;
+        tourFocus.style.top = `${y}px`;
+        tourFocus.style.width = `${w}px`;
+        tourFocus.style.height = `${h}px`;
+
+        dimTop.style.left = "0px";
+        dimTop.style.top = "0px";
+        dimTop.style.width = `${frame.stageW}px`;
+        dimTop.style.height = `${y}px`;
+
+        dimRight.style.left = `${x + w}px`;
+        dimRight.style.top = `${y}px`;
+        dimRight.style.width = `${Math.max(0, frame.stageW - (x + w))}px`;
+        dimRight.style.height = `${h}px`;
+
+        dimBottom.style.left = "0px";
+        dimBottom.style.top = `${y + h}px`;
+        dimBottom.style.width = `${frame.stageW}px`;
+        dimBottom.style.height = `${Math.max(0, frame.stageH - (y + h))}px`;
+
+        dimLeft.style.left = "0px";
+        dimLeft.style.top = `${y}px`;
+        dimLeft.style.width = `${x}px`;
+        dimLeft.style.height = `${h}px`;
+
+        tourCaption.textContent = step.caption;
+        tourStep.textContent = `Step ${currentStep + 1} / ${steps.length}`;
+        tourPrev.disabled = currentStep === 0;
+        tourNext.textContent = currentStep === steps.length - 1 ? "Finish" : "Next";
+      }
+
+      function openTour() {
+        tourOverlay.hidden = false;
+        applyStep(0);
+      }
+
+      function closeTour() {
+        tourOverlay.hidden = true;
+      }
+
+      // Keep onboarding hidden until the user explicitly opens it.
+      tourOverlay.hidden = true;
+      helpBtn.addEventListener("click", openTour);
+      tourClose.addEventListener("click", closeTour);
+      tourPrev.addEventListener("click", closeTour);
+      tourNext.addEventListener("click", () => {
+        if (currentStep === steps.length - 1) {
+          closeTour();
+          return;
+        }
+        applyStep(currentStep + 1);
+      });
+      tourStage.addEventListener("click", () => {
+        if (currentStep === steps.length - 1) {
+          closeTour();
+          return;
+        }
+        applyStep(currentStep + 1);
+      });
+      tourImage.addEventListener("load", () => {
+        if (!tourOverlay.hidden) {
+          applyStep(currentStep);
+        }
+      });
+      window.addEventListener("resize", () => {
+        if (!tourOverlay.hidden) {
+          applyStep(currentStep);
+        }
+      });
+      tourOverlay.addEventListener("click", (event) => {
+        if (event.target === tourOverlay) {
+          closeTour();
+        }
+      });
+
+      document.getElementById("solo-btn").addEventListener("click", () => launch("solo"));
+      document.getElementById("duel-btn").addEventListener("click", () => launch("duel"));
+    </script>
+  </body>
+</html>

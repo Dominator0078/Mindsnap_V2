@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindSnap - Game Zone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <main class="app">
+    <header class="hud">
+      <div class="hud-card">
+        <div class="label">Mode</div>
+        <strong id="modeLabel">Solo</strong>
+      </div>
+      <div class="hud-card">
+        <div class="label">Difficulty</div>
+        <strong id="difficultyLabel">Medium</strong>
+      </div>
+      <div class="hud-card timer">
+        <div class="label">Time Left</div>
+        <strong id="timer">60</strong>
+      </div>
+    </header>
+
+    <section class="center-zone">
+      <aside class="score-card">
+        <h2>You</h2>
+        <p class="score" id="playerScore">0</p>
+      </aside>
+
+      <section class="board-wrap" aria-label="MindSnap game area">
+        <div id="board" class="board" role="grid" aria-label="Memory grid"></div>
+      </section>
+
+      <aside class="score-card" id="botCard">
+        <h2>Bot</h2>
+        <p class="score" id="botScore">0</p>
+      </aside>
+    </section>
+
+    <footer class="bottom-row">
+      <a class="home-link" href="index.html">Back to Home</a>
+      <button id="restartBtn" class="restart-btn">Restart Match</button>
+    </footer>
+  </main>
+
+  <div id="overlay" class="overlay" aria-live="polite">
+    <div class="overlay-card">
+      <p id="resultMode">Solo Result</p>
+      <h2 id="resultTitle">Time Up</h2>
+      <p id="resultBody">Your final score: 0</p>
+      <button id="playAgainBtn" class="restart-btn">Play Again</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
