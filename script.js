@@ -65,10 +65,6 @@ function safeRemove(storage, key, area) {
 }
 
 const boardEl = document.getElementById("board");
-const boardResultEl = document.getElementById("boardResult");
-const boardResultTitleEl = document.getElementById("boardResultTitle");
-const resultTableBodyEl = document.getElementById("resultTableBody");
-const backCountdownEl = document.getElementById("backCountdown");
 const boardWrapEl = document.querySelector(".board-wrap");
 const timerEl = document.getElementById("timer");
 const modeLabelEl = document.getElementById("modeLabel");
@@ -391,53 +387,16 @@ function sendPvPFinal() {
   });
 }
 
-function hideBoardResult() {
-  if (!boardResultEl || !boardEl) return;
-  boardResultEl.hidden = true;
-  boardEl.hidden = false;
-  if (resultTableBodyEl) resultTableBodyEl.textContent = "";
-}
-
-function showBoardResult({ title, rows }) {
-  if (!boardResultEl || !boardEl || !boardResultTitleEl || !resultTableBodyEl) return;
-  setAllTilesDisabled(true);
-  boardEl.hidden = true;
-  boardResultEl.hidden = false;
-  boardResultTitleEl.textContent = title;
-  resultTableBodyEl.textContent = "";
-
-  for (const row of rows) {
-    const tr = document.createElement("tr");
-    const playerCell = document.createElement("td");
-    const pointsCell = document.createElement("td");
-    playerCell.textContent = row.name;
-    pointsCell.textContent = String(row.points);
-    tr.appendChild(playerCell);
-    tr.appendChild(pointsCell);
-    resultTableBodyEl.appendChild(tr);
-  }
-}
-
-function forceGameplayBoardView() {
-  if (!boardResultEl || !boardEl) return;
-  boardResultEl.hidden = true;
-  boardEl.hidden = false;
-}
-
-function scheduleReturnHome(seconds = 3) {
+function scheduleReturnHome(detailsText = "", seconds = 3) {
   clearTimeout(state.returnHomeId);
   clearInterval(state.returnHomeTickId);
 
   let secondsLeft = Math.max(1, Number(seconds) || 3);
-  if (backCountdownEl) {
-    backCountdownEl.textContent = `Going back to home in ${secondsLeft} second${secondsLeft === 1 ? "" : "s"}...`;
-  }
+  resultBodyEl.textContent = `${detailsText} Going back to home in ${secondsLeft} second${secondsLeft === 1 ? "" : "s"}...`.trim();
 
   state.returnHomeTickId = setInterval(() => {
     secondsLeft -= 1;
-    if (backCountdownEl) {
-      backCountdownEl.textContent = `Going back to home in ${Math.max(0, secondsLeft)} second${secondsLeft === 1 ? "" : "s"}...`;
-    }
+    resultBodyEl.textContent = `${detailsText} Going back to home in ${Math.max(0, secondsLeft)} second${secondsLeft === 1 ? "" : "s"}...`.trim();
     if (secondsLeft <= 0) {
       clearInterval(state.returnHomeTickId);
       state.returnHomeTickId = null;
@@ -461,15 +420,15 @@ function endPvPBecauseLeft() {
   clearTimeout(state.player.nextId);
   setAllTilesDisabled(true);
   setBoardLoading(false);
+  boardEl.hidden = false;
   overlayEl.classList.remove("show");
 
-  // Result panel in board area is reserved for match-end only (timer complete).
   resultModeEl.textContent = "Multiplayer Result";
   resultTitleEl.textContent = "Opponent Left";
-  resultBodyEl.textContent = "Opponent disconnected. Returning to Home...";
+  resultBodyEl.textContent = "Opponent disconnected.";
   overlayEl.classList.add("show");
-  playAgainBtn.style.display = "";
-  scheduleReturnHome();
+  playAgainBtn.style.display = "none";
+  scheduleReturnHome("Opponent disconnected.", 3);
 
   state.endedAt = new Date().toISOString();
   stashPendingEnd(buildEndPayload());
@@ -536,11 +495,11 @@ function initPvPRealtime() {
       state.pvp.opponentFinal = final;
       state.pvp.opponentScore = Math.max(state.pvp.opponentScore || 0, final);
       updateHud();
-      if (!state.live && !boardResultEl.hidden) {
+      if (!state.live && overlayEl.classList.contains("show")) {
         const you = state.player.totalScore;
         const opp = state.pvp.opponentFinal;
         const oppName = state.pvp.opponentName || "Opponent";
-        boardResultTitleEl.textContent = you === opp ? "Draw" : you > opp ? `${localPlayerName} Wins` : `${oppName} Wins`;
+        resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? `${localPlayerName} Wins` : `${oppName} Wins`;
       }
     })
     .on("broadcast", { event: "leave" }, ({ payload }) => {
@@ -569,14 +528,14 @@ function initPvPRealtime() {
           setAllTilesDisabled(true);
           setBoardLoading(false);
           overlayEl.classList.remove("show");
+          boardEl.hidden = false;
 
-          // Result panel in board area is reserved for match-end only (timer complete).
           resultModeEl.textContent = "Multiplayer Result";
           resultTitleEl.textContent = "Connection Error";
-          resultBodyEl.textContent = "Realtime connection failed. Returning to Home...";
+          resultBodyEl.textContent = "Realtime connection failed.";
           overlayEl.classList.add("show");
-          playAgainBtn.style.display = "";
-          scheduleReturnHome();
+          playAgainBtn.style.display = "none";
+          scheduleReturnHome("Realtime connection failed.", 3);
         }
       }
     });
@@ -635,11 +594,11 @@ function showPvPStartCountdown(startAtMs) {
 function startTimer() {
   cancelAnimationFrame(state.rafId);
   const epoch = matchEpoch;
-  forceGameplayBoardView();
+  boardEl.hidden = false;
 
   function tick() {
     if (!state.live || epoch !== matchEpoch) return;
-    forceGameplayBoardView();
+    boardEl.hidden = false;
     const remainingMs = syncHudTimerFromDeadline();
     if (remainingMs <= 0) {
       endMatch();
@@ -676,7 +635,7 @@ function createPatternState(patternNumber) {
 function startPlayerPattern() {
   if (!state.live) return;
   const epoch = matchEpoch;
-  forceGameplayBoardView();
+  boardEl.hidden = false;
 
   setBoardLoading(false);
   state.player.patternCount += 1;
@@ -721,7 +680,7 @@ function finishPlayerPattern() {
 function onPlayerTileClick(index) {
   const current = state.player.current;
   if (!state.live || !current) return;
-  forceGameplayBoardView();
+  boardEl.hidden = false;
   if (!state.player.accepting) return;
   if (current.clicksUsed >= current.clickLimit) return;
   if (current.clicked.has(index)) return;
@@ -950,30 +909,35 @@ function endMatch() {
   botWorker?.postMessage({ type: "stop" });
   setAllTilesDisabled(true);
   setBoardLoading(false);
+  boardEl.hidden = false;
 
   let title = "Result";
-  const rows = [];
+  let details = "";
 
   if (mode === "duel") {
     const you = state.player.totalScore;
     const bot = state.bot.totalScore;
     title = you === bot ? "Draw" : you > bot ? `${localPlayerName} Wins` : "Bot Wins";
-    rows.push({ name: localPlayerName, points: you }, { name: "Bot", points: bot });
+    details = `${localPlayerName}: ${you} | Bot: ${bot}`;
   } else if (mode === "pvp") {
     sendPvPFinal();
     const you = state.player.totalScore;
     const oppName = state.pvp.opponentName || "Opponent";
     const opp = state.pvp.opponentFinal != null ? state.pvp.opponentFinal : state.pvp.opponentScore;
     title = you === opp ? "Draw" : you > opp ? `${localPlayerName} Wins` : `${oppName} Wins`;
-    rows.push({ name: localPlayerName, points: you }, { name: oppName, points: opp });
+    details = `${localPlayerName}: ${you} | ${oppName}: ${opp}`;
   } else {
     const you = state.player.totalScore;
     title = `${localPlayerName} Wins`;
-    rows.push({ name: localPlayerName, points: you });
+    details = `${localPlayerName}: ${you}`;
   }
 
-  showBoardResult({ title, rows });
-  scheduleReturnHome(3);
+  resultModeEl.textContent = mode === "pvp" ? "Multiplayer Result" : mode === "duel" ? "Duel Result" : "Solo Result";
+  resultTitleEl.textContent = title;
+  resultBodyEl.textContent = details;
+  overlayEl.classList.add("show");
+  playAgainBtn.style.display = "none";
+  scheduleReturnHome(details, 3);
 
   // Queue and send ONLY after match end.
   state.endedAt = new Date().toISOString();
@@ -1031,8 +995,7 @@ function resetMatch() {
 
   overlayEl.classList.remove("show");
   playAgainBtn.style.display = "";
-  hideBoardResult();
-  forceGameplayBoardView();
+  boardEl.hidden = false;
   setBoardLoading(false);
   updateHud();
 
