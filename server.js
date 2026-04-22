@@ -8,8 +8,8 @@ const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, "data");
 const MATCH_FILE = path.join(DATA_DIR, "matches.json");
 const fsp = fs.promises;
-const MODE_SET = new Set(["solo", "duel", "pvp", "reaction"]);
-const DIFFICULTY_SET = new Set(["easy", "medium", "hard", "reaction"]);
+const MODE_SET = new Set(["solo", "duel", "pvp", "reaction", "nexus"]);
+const DIFFICULTY_SET = new Set(["easy", "medium", "hard", "reaction", "nexus"]);
 const WINNER_SET = new Set(["you", "draw", "bot", "opponent"]);
 const MAX_SCORE = 1_000_000;
 const MAX_PATTERNS = 100_000;
@@ -178,6 +178,35 @@ function sanitizeMatchPayload(payload) {
           earlyTaps,
           avgReactionMs,
           bestReactionMs
+        }
+      };
+    } else if (mode === "nexus") {
+      const nexusStats = payload.stats.nexus;
+      if (nexusStats == null || typeof nexusStats !== "object") {
+        return { ok: false, message: "Invalid nexus stats." };
+      }
+      const rounds = parseIntBounded(nexusStats.rounds, { min: 0, max: MAX_PATTERNS });
+      const hits = parseIntBounded(nexusStats.hits, { min: 0, max: MAX_SCORE });
+      const misses = parseIntBounded(nexusStats.misses, { min: 0, max: MAX_SCORE });
+      const avgTraceMs = parseIntBounded(nexusStats.avgTraceMs, { min: 0, max: 100_000 });
+      const bestTraceMs = parseIntBounded(nexusStats.bestTraceMs, { min: 0, max: 100_000, allowNull: true });
+      const modeType = normalizeText(nexusStats.modeType || mode, 12).toLowerCase();
+      const blindEnabled = Boolean(nexusStats.blindEnabled);
+      if (rounds == null || hits == null || misses == null || avgTraceMs == null) {
+        return { ok: false, message: "Invalid nexus stats values." };
+      }
+      if (modeType !== "solo" && modeType !== "pvp") {
+        return { ok: false, message: "Invalid nexus modeType." };
+      }
+      stats = {
+        nexus: {
+          rounds,
+          hits,
+          misses,
+          avgTraceMs,
+          bestTraceMs,
+          blindEnabled,
+          modeType
         }
       };
     } else {

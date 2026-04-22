@@ -82,17 +82,22 @@
         </section>
       </section>
 
-      <section class="home-card tap-card">
-        <div class="card-top">
-          <p class="eyebrow">REFLEX CHALLENGE</p>
+      <section class="home-card nexus-card">
+        <h2 class="tap-title">Nexus Trace</h2>
+        <p class="nexus-tagline">Fluid path memory racing with solo and ghost multiplayer.</p>
+        <label class="nexus-toggle">
+          <input id="nexus-blind-toggle" type="checkbox" />
+          <span>Blind Intersections</span>
+        </label>
+        <div class="action-row nexus-action-row">
+          <button id="nexus-solo-btn" class="action-btn">Solo</button>
+          <button id="nexus-multi-btn" class="action-btn multi">Multiplayer</button>
+          <button id="nexus-private-btn" class="action-btn duel">Private Match</button>
         </div>
+      </section>
+
+      <section class="home-card tap-card">
         <h2 class="tap-title">Tap Green</h2>
-        <p class="tagline">Tap only when it turns green. Red taps count as early mistakes. Built for burst-speed reactions.</p>
-        <ul class="tap-rules">
-          <li>Wait time before green is random (1.0s to 4.0s).</li>
-          <li>Tap green: +1 score and reaction time is recorded.</li>
-          <li>Tap red: -1 score and marked as Early Tap.</li>
-        </ul>
         <div class="action-row tap-action-row">
           <button id="tapgreen-btn" class="action-btn tap-green-btn">Start Tap Green</button>
         </div>
@@ -277,6 +282,7 @@
       const historyList = document.getElementById("history-list");
       const historyStatus = document.getElementById("history-status");
       const historyRefreshBtn = document.getElementById("history-refresh");
+      const nexusBlindToggle = document.getElementById("nexus-blind-toggle");
 
       const MIN_SCAN_MS = 3000;
       const MATCH_START_DELAY_MS = 5000;
@@ -359,6 +365,7 @@
       function historyScoreLabel(match) {
         const yourScore = Number(match?.playerScore || 0);
         if (match?.mode === "solo" || match?.mode === "reaction") return `Score ${yourScore}`;
+        if (match?.mode === "nexus" && (match?.botScore == null || match?.stats?.nexus?.modeType === "solo")) return `Score ${yourScore}`;
         const other = match?.botScore == null ? 0 : Number(match.botScore);
         return `You ${yourScore} vs ${other}`;
       }
@@ -466,6 +473,7 @@
       const DEBUG_MP = true;
       let supa = null;
       let lobbyChannel = null;
+      let lobbyTopic = "mindsnap:lobby";
       let lobbyState = new Map(); // clientId -> meta
       let scanning = false;
       let scanStartedAt = 0;
@@ -475,6 +483,7 @@
       let scanPollId = null;
       let lobbySubscribed = false;
       let lobbyWatchdogId = null;
+      let scanGame = "mindsnap";
 
       function rebuildBlips() {
         radarBlips.textContent = "";
@@ -531,7 +540,7 @@
       function getSettings() {
         const difficulty = document.getElementById("difficulty").value;
         const duration = document.getElementById("duration").value;
-        return { difficulty, duration: Number(duration) };
+        return { difficulty, duration: Number(duration), blind: getNexusBlind() === "1" };
       }
 
       async function setPresenceStatus(status, extra = {}) {
@@ -573,8 +582,22 @@
         if (remaining > 0) await sleep(remaining);
       }
 
-      function navigateToPvP(startPayload) {
-        const { matchId, seed, startAt, difficulty, duration, p1, p2 } = startPayload;
+      function navigateToMatchedGame(startPayload) {
+        const { game, matchId, seed, startAt, difficulty, duration, p1, p2, blind } = startPayload;
+        if (game === "nexus") {
+          const q = new URLSearchParams({
+            mode: "pvp",
+            matchId,
+            seed: String(seed),
+            startAt: String(startAt),
+            blind: blind ? "1" : "0",
+            p1: `${p1.clientId}|${p1.name}`,
+            p2: `${p2.clientId}|${p2.name}`
+          });
+          window.location.href = `nexus_trace.html?${q.toString()}`;
+          return;
+        }
+
         const q = new URLSearchParams({
           mode: "pvp",
           matchId,
@@ -595,7 +618,7 @@
         radarSub.textContent = "Match found. Synchronizing…";
         setPresenceStatus("in_match", { matchId: startPayload.matchId });
         await waitForMinScan();
-        navigateToPvP(startPayload);
+        navigateToMatchedGame(startPayload);
       }
 
       function failScanning(message) {
@@ -624,12 +647,15 @@
         const now = Date.now();
         const matchId = crypto?.randomUUID?.() || `m_${now}_${Math.random().toString(16).slice(2)}`;
         const seed = Math.floor(Math.random() * 0x7fffffff);
+        const blind = Boolean(settings.blind);
         return {
+          game: scanGame,
           matchId,
           seed,
           startAt: now + MATCH_START_DELAY_MS,
           difficulty: settings.difficulty || "medium",
           duration: Number(settings.duration || 60),
+          blind,
           p1: { clientId: leaderId, name: leaderMeta?.name || "Player 1" },
           p2: { clientId: otherId, name: otherMeta?.name || "Player 2" }
         };
@@ -673,7 +699,7 @@
         }
       }
 
-      async function startScanning() {
+      async function startScanning(game = "mindsnap") {
         if (scanning) return;
         if (!playerName) {
           openNameModal();
@@ -685,13 +711,17 @@
           return;
         }
 
+        scanGame = game === "nexus" ? "nexus" : "mindsnap";
+        lobbyTopic = scanGame === "nexus" ? "nexus:lobby" : "mindsnap:lobby";
         scanning = true;
         matchCommitted = false;
         lastMatchId = null;
         leaderPayload = null;
         scanStartedAt = Date.now();
         setRadar(true);
-        radarSub.textContent = "Hold tight. Match starts automatically.";
+        radarSub.textContent = scanGame === "nexus"
+          ? "Scanning Nexus players… match starts automatically."
+          : "Hold tight. Match starts automatically.";
         lobbySubscribed = false;
 
         if (!supa) {
@@ -705,8 +735,19 @@
           });
         }
 
+        const currentTopic = lobbyChannel?.topic || "";
+        if (lobbyChannel && currentTopic !== lobbyTopic) {
+          try {
+            supa.removeChannel(lobbyChannel);
+          } catch {
+            /* ignore */
+          }
+          lobbyChannel = null;
+          lobbyState.clear();
+        }
+
         if (!lobbyChannel) {
-          lobbyChannel = supa.channel("mindsnap:lobby", {
+          lobbyChannel = supa.channel(lobbyTopic, {
             config: {
               broadcast: { self: true, ack: true },
               presence: { key: clientId }
@@ -796,6 +837,39 @@
         const duration = document.getElementById("duration").value;
         const target = `mind_snap.html?mode=${encodeURIComponent(mode)}&difficulty=${encodeURIComponent(difficulty)}&duration=${encodeURIComponent(duration)}`;
         window.location.href = target;
+      }
+
+      function getNexusBlind() {
+        return nexusBlindToggle?.checked ? "1" : "0";
+      }
+
+      function launchNexusSolo() {
+        const q = new URLSearchParams({
+          mode: "solo",
+          duration: "60",
+          blind: getNexusBlind()
+        });
+        window.location.href = `nexus_trace.html?${q.toString()}`;
+      }
+
+      function launchNexusPrivate() {
+        if (!playerName) {
+          openNameModal();
+          return;
+        }
+        const raw = window.prompt("Enter private match code (or leave blank to auto-generate):", "");
+        if (raw === null) return;
+        const cleaned = String(raw).trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+        const code = cleaned || Math.random().toString(36).slice(2, 8);
+        if (!cleaned) window.alert(`Share this private code with your friend: ${code}`);
+
+        const q = new URLSearchParams({
+          mode: "pvp",
+          matchId: `nexus_private_${code}`,
+          blind: getNexusBlind(),
+          private: "1"
+        });
+        window.location.href = `nexus_trace.html?${q.toString()}`;
       }
 
       function launchTapGreen() {
@@ -960,7 +1034,10 @@
 
       document.getElementById("solo-btn").addEventListener("click", () => launch("solo"));
       document.getElementById("duel-btn").addEventListener("click", () => launch("duel"));
-      document.getElementById("multi-btn").addEventListener("click", startScanning);
+      document.getElementById("multi-btn").addEventListener("click", () => startScanning("mindsnap"));
+      document.getElementById("nexus-solo-btn").addEventListener("click", launchNexusSolo);
+      document.getElementById("nexus-multi-btn").addEventListener("click", () => startScanning("nexus"));
+      document.getElementById("nexus-private-btn").addEventListener("click", launchNexusPrivate);
       document.getElementById("tapgreen-btn").addEventListener("click", launchTapGreen);
     </script>
   </body>

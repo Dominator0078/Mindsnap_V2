@@ -245,20 +245,20 @@ body {
 }
 
 .home-main {
-  width: min(1200px, 100%);
+  width: min(1380px, 100%);
   margin: 0 auto;
   min-height: 100vh;
   display: grid;
-  align-items: center;
+  align-items: start;
   justify-items: center;
-  align-content: center;
+  align-content: start;
   padding: clamp(1rem, 2.2vw, 2rem);
-  grid-template-columns: minmax(320px, 560px) minmax(320px, 500px);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: clamp(0.9rem, 2vw, 1.4rem);
 }
 
 .home-card {
-  width: min(540px, 100%);
+  width: 100%;
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -300,23 +300,51 @@ body {
 .tap-card {
   border-color: rgba(136, 255, 169, 0.35);
   animation-delay: 0.15s, 0.5s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 240px;
+}
+
+.nexus-card {
+  border-color: rgba(160, 167, 255, 0.4);
+  min-height: 240px;
+  animation-delay: 0.08s, 0.22s;
+}
+
+.nexus-tagline {
+  margin: 0.15rem 0 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.nexus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.65rem;
+}
+
+.nexus-toggle input {
+  accent-color: #8ea2ff;
+}
+
+.nexus-action-row {
+  margin-top: auto;
 }
 
 .tap-title {
-  margin: 0.45rem 0 0.4rem;
+  margin: 0;
   font-size: clamp(1.6rem, 5vw, 2.2rem);
-}
-
-.tap-rules {
-  margin: 0.7rem 0 0;
-  padding-left: 1.1rem;
-  color: var(--ink-soft);
-  display: grid;
-  gap: 0.35rem;
+  text-align: center;
 }
 
 .tap-action-row {
   grid-template-columns: 1fr;
+  margin-top: 0;
 }
 
 .tap-green-btn {
@@ -706,15 +734,13 @@ h1 {
 @media (max-width: 1180px) {
   .home-main {
     grid-template-columns: 1fr;
-    align-items: start;
-    align-content: start;
     min-height: auto;
     padding-top: 1rem;
     padding-bottom: 2rem;
   }
 
   .home-card {
-    width: min(680px, 100%);
+    width: min(760px, 100%);
   }
 }
 

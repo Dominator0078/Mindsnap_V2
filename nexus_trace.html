@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus Trace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="nexus_trace.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hud">
+      <div class="hud-card">
+        <span class="label">Mode</span>
+        <strong id="modeLabel">Solo</strong>
+      </div>
+      <div class="hud-card">
+        <span class="label">Time Left</span>
+        <strong id="timerLabel">60</strong>
+      </div>
+      <div class="hud-card">
+        <span class="label">Round</span>
+        <strong id="roundLabel">0</strong>
+      </div>
+      <div class="hud-card">
+        <span class="label">Blind</span>
+        <strong id="blindLabel">Off</strong>
+      </div>
+    </header>
+
+    <section class="score-row">
+      <article class="score-card">
+        <span id="playerNameLabel">You</span>
+        <strong id="playerScoreLabel">0</strong>
+      </article>
+      <article class="score-card" id="opponentCard">
+        <span id="opponentNameLabel">Opponent</span>
+        <strong id="opponentScoreLabel">0</strong>
+      </article>
+    </section>
+
+    <section class="stage-wrap">
+      <canvas id="nexusCanvas" aria-label="Nexus Trace game field"></canvas>
+
+      <div id="waitingLayer" class="layer waiting-layer" hidden>
+        <h2 id="waitingTitle">Preparing Match</h2>
+        <p id="waitingSub">Syncing players…</p>
+      </div>
+
+      <div id="resultLayer" class="layer result-layer" hidden>
+        <h2 id="resultTitle">Result</h2>
+        <table class="result-table">
+          <thead>
+            <tr><th>Player</th><th>Points</th></tr>
+          </thead>
+          <tbody>
+            <tr><td id="resultYouName">You</td><td id="resultYouScore">0</td></tr>
+            <tr><td id="resultOppName">Opponent</td><td id="resultOppScore">0</td></tr>
+          </tbody>
+        </table>
+        <p id="returnLabel">Going back to home in 3 seconds…</p>
+      </div>
+    </section>
+
+    <footer class="controls">
+      <button id="restartBtn" class="ctrl-btn">Restart</button>
+      <a href="index.html" class="ctrl-btn">Back to Home</a>
+    </footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="nexus_trace.js"></script>
+</body>
+</html>
