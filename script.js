@@ -427,8 +427,7 @@ function endPvPBecauseLeft() {
   resultTitleEl.textContent = "Opponent Left";
   resultBodyEl.textContent = "Opponent disconnected.";
   overlayEl.classList.add("show");
-  playAgainBtn.style.display = "none";
-  scheduleReturnHome("Opponent disconnected.", 3);
+  playAgainBtn.style.display = "block";
 
   state.endedAt = new Date().toISOString();
   stashPendingEnd(buildEndPayload());
@@ -936,8 +935,7 @@ function endMatch() {
   resultTitleEl.textContent = title;
   resultBodyEl.textContent = details;
   overlayEl.classList.add("show");
-  playAgainBtn.style.display = "none";
-  scheduleReturnHome(details, 3);
+  playAgainBtn.style.display = "block";
 
   // Queue and send ONLY after match end.
   state.endedAt = new Date().toISOString();
