@@ -22,7 +22,9 @@ body {
     radial-gradient(circle at 15% 10%, rgba(88, 243, 255, 0.18), transparent 45%),
     radial-gradient(circle at 82% 6%, rgba(135, 255, 169, 0.16), transparent 48%),
     linear-gradient(150deg, var(--bg-0), var(--bg-1));
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .name-modal {
@@ -243,28 +245,61 @@ body {
 }
 
 .home-main {
+  width: min(1200px, 100%);
+  margin: 0 auto;
   min-height: 100vh;
   display: grid;
   align-items: center;
   justify-items: center;
-  padding: 1.25rem;
-  grid-template-columns: repeat(2, minmax(320px, 540px));
-  gap: 1rem;
+  align-content: center;
+  padding: clamp(1rem, 2.2vw, 2rem);
+  grid-template-columns: minmax(320px, 560px) minmax(320px, 500px);
+  gap: clamp(0.9rem, 2vw, 1.4rem);
 }
 
 .home-card {
   width: min(540px, 100%);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 1.3rem;
   background: var(--panel);
   backdrop-filter: blur(10px);
   box-shadow: 0 24px 54px rgba(0, 0, 0, 0.4);
-  animation: enter 0.65s ease-out both;
+  animation: enter 0.65s ease-out both, cardFloat 9s ease-in-out infinite;
+}
+
+.home-card::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 42%;
+  background: radial-gradient(circle at 50% 50%, rgba(88, 243, 255, 0.22), transparent 65%);
+  opacity: 0.65;
+  pointer-events: none;
+  z-index: -1;
+  animation: haloShift 7s ease-in-out infinite;
+}
+
+.home-card::after {
+  content: "";
+  position: absolute;
+  left: -40%;
+  top: 0;
+  width: 34%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(135, 255, 169, 0.08), transparent);
+  transform: skewX(-18deg);
+  pointer-events: none;
+  z-index: 0;
+  animation: cardScan 8s linear infinite;
 }
 
 .tap-card {
   border-color: rgba(136, 255, 169, 0.35);
+  animation-delay: 0.15s, 0.5s;
 }
 
 .tap-title {
@@ -376,6 +411,8 @@ h1 {
 }
 
 .action-btn {
+  position: relative;
+  overflow: hidden;
   border: 0;
   border-radius: 11px;
   padding: 0.74rem;
@@ -386,9 +423,25 @@ h1 {
   transition: transform 170ms ease, box-shadow 170ms ease;
 }
 
+.action-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-20deg);
+  transition: left 420ms ease;
+}
+
 .action-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(88, 243, 255, 0.24);
+}
+
+.action-btn:hover::after {
+  left: 140%;
 }
 
 .action-btn.duel {
@@ -405,6 +458,7 @@ h1 {
   border-radius: 12px;
   background: rgba(7, 22, 35, 0.82);
   padding: 0.75rem;
+  position: relative;
 }
 
 .history-head {
@@ -622,6 +676,23 @@ h1 {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes haloShift {
+  0%, 100% { transform: translateX(-4%); opacity: 0.5; }
+  50% { transform: translateX(5%); opacity: 0.82; }
+}
+
+@keyframes cardScan {
+  0% { left: -45%; opacity: 0; }
+  12% { opacity: 1; }
+  34% { left: 115%; opacity: 0; }
+  100% { left: 115%; opacity: 0; }
+}
+
 @keyframes sweep {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -635,12 +706,23 @@ h1 {
 @media (max-width: 1180px) {
   .home-main {
     grid-template-columns: 1fr;
+    align-items: start;
+    align-content: start;
+    min-height: auto;
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+  }
+
+  .home-card {
+    width: min(680px, 100%);
   }
 }
 
 @media (max-width: 620px) {
   .home-main {
     grid-template-columns: 1fr;
+    min-height: auto;
+    padding-bottom: 2.5rem;
   }
 
   .setting-grid,
@@ -648,7 +730,29 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .history-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .home-card {
+    animation: enter 0.55s ease-out both;
+  }
+
   .tour-controls {
     flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-card,
+  .home-card::before,
+  .home-card::after,
+  .action-btn::after,
+  .radar-sweep,
+  .radar-blip,
+  .ghost-grid {
+    animation: none !important;
+    transition: none !important;
   }
 }
