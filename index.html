@@ -264,6 +264,32 @@
 
       const MIN_SCAN_MS = 3000;
       const MATCH_START_DELAY_MS = 5000;
+      const storageWarnings = new Set();
+
+      function warnStorage(area, err) {
+        if (storageWarnings.has(area)) return;
+        storageWarnings.add(area);
+        console.warn(`[Storage] ${area} unavailable; using in-memory fallback.`, err?.name || err);
+      }
+
+      function safeGet(storage, key, area) {
+        try {
+          return storage.getItem(key);
+        } catch (err) {
+          warnStorage(area, err);
+          return null;
+        }
+      }
+
+      function safeSet(storage, key, value, area) {
+        try {
+          storage.setItem(key, value);
+          return true;
+        } catch (err) {
+          warnStorage(area, err);
+          return false;
+        }
+      }
 
       function safeName(raw) {
         const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
@@ -272,21 +298,22 @@
 
       function ensureClientId() {
         // Use sessionStorage so two tabs can be two distinct players.
-        let id = sessionStorage.getItem(CLIENT_KEY) || localStorage.getItem(CLIENT_KEY);
+        let id = safeGet(sessionStorage, CLIENT_KEY, "session/clientId-read")
+          || safeGet(localStorage, CLIENT_KEY, "local/clientId-read");
         if (id) return id;
         try {
           id = crypto.randomUUID();
         } catch {
           id = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
         }
-        sessionStorage.setItem(CLIENT_KEY, id);
+        safeSet(sessionStorage, CLIENT_KEY, id, "session/clientId-write");
         // Best-effort backup for same-tab navigation in older browsers.
-        localStorage.setItem(CLIENT_KEY, id);
+        safeSet(localStorage, CLIENT_KEY, id, "local/clientId-write");
         return id;
       }
 
       function ensureName() {
-        const existing = localStorage.getItem(NAME_KEY);
+        const existing = safeGet(localStorage, NAME_KEY, "local/name-read");
         if (existing && safeName(existing)) return safeName(existing);
         return null;
       }
@@ -410,7 +437,7 @@
           return;
         }
         playerName = value;
-        localStorage.setItem(NAME_KEY, playerName);
+        safeSet(localStorage, NAME_KEY, playerName, "local/name-write");
         nameError.textContent = "";
         closeNameModal();
         loadHistory();

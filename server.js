@@ -8,6 +8,13 @@ const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, "data");
 const MATCH_FILE = path.join(DATA_DIR, "matches.json");
 const fsp = fs.promises;
+const MODE_SET = new Set(["solo", "duel", "pvp"]);
+const DIFFICULTY_SET = new Set(["easy", "medium", "hard"]);
+const WINNER_SET = new Set(["you", "draw", "bot", "opponent"]);
+const MAX_SCORE = 1_000_000;
+const MAX_PATTERNS = 100_000;
+const MAX_NAME_LEN = 32;
+const MAX_MATCH_ID_LEN = 120;
 
 function ensureStorage() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -83,6 +90,100 @@ function collectBody(req) {
   });
 }
 
+function normalizeText(value, maxLen = 64) {
+  const cleaned = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, maxLen);
+  return cleaned;
+}
+
+function parseTimestamp(value, fallbackIso) {
+  if (value == null || value === "") return fallbackIso || null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function parseIntBounded(value, { min = 0, max = Number.MAX_SAFE_INTEGER, allowNull = false } = {}) {
+  if (value == null || value === "") return allowNull ? null : min;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const int = Math.trunc(num);
+  if (int < min || int > max) return null;
+  return int;
+}
+
+function sanitizeMatchPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, message: "Payload must be an object." };
+  }
+
+  const mode = normalizeText(payload.mode || "solo", 12).toLowerCase();
+  if (!MODE_SET.has(mode)) return { ok: false, message: "Invalid mode." };
+
+  const difficulty = normalizeText(payload.difficulty || "medium", 12).toLowerCase();
+  if (!DIFFICULTY_SET.has(difficulty)) return { ok: false, message: "Invalid difficulty." };
+
+  const duration = parseIntBounded(payload.duration, { min: 60, max: 120 });
+  if (duration == null) return { ok: false, message: "Invalid duration." };
+
+  const playerScore = parseIntBounded(payload.playerScore, { min: 0, max: MAX_SCORE });
+  if (playerScore == null) return { ok: false, message: "Invalid playerScore." };
+
+  const botScore = payload.botScore == null ? null : parseIntBounded(payload.botScore, { min: 0, max: MAX_SCORE });
+  if (payload.botScore != null && botScore == null) return { ok: false, message: "Invalid botScore." };
+
+  const patternsPlayed = parseIntBounded(payload.patternsPlayed, { min: 0, max: MAX_PATTERNS });
+  if (patternsPlayed == null) return { ok: false, message: "Invalid patternsPlayed." };
+
+  const winnerRaw = payload.winner == null ? null : normalizeText(payload.winner, 12).toLowerCase();
+  if (winnerRaw != null && !WINNER_SET.has(winnerRaw)) return { ok: false, message: "Invalid winner." };
+
+  const startedAt = parseTimestamp(payload.startedAt, null);
+  if (payload.startedAt != null && startedAt == null) return { ok: false, message: "Invalid startedAt." };
+
+  const endedAt = parseTimestamp(payload.endedAt, new Date().toISOString());
+  if (endedAt == null) return { ok: false, message: "Invalid endedAt." };
+
+  const matchIdRaw = normalizeText(payload.matchId || "", MAX_MATCH_ID_LEN);
+  const matchId = matchIdRaw || crypto.randomUUID();
+
+  const playerName = normalizeText(payload.playerName || "You", MAX_NAME_LEN) || "You";
+  const opponentNameRaw = payload.opponentName == null ? null : normalizeText(payload.opponentName, MAX_NAME_LEN);
+  const opponentName = opponentNameRaw || null;
+
+  let stats = null;
+  if (payload.stats != null) {
+    if (typeof payload.stats !== "object") return { ok: false, message: "Invalid stats." };
+    const clicks = parseIntBounded(payload.stats.clicks, { min: 0, max: MAX_SCORE });
+    const correct = parseIntBounded(payload.stats.correct, { min: 0, max: MAX_SCORE });
+    const wrong = parseIntBounded(payload.stats.wrong, { min: 0, max: MAX_SCORE });
+    if (clicks == null || correct == null || wrong == null) return { ok: false, message: "Invalid stats values." };
+    if (correct + wrong > clicks) return { ok: false, message: "Invalid stats consistency." };
+    stats = { clicks, correct, wrong };
+  }
+
+  return {
+    ok: true,
+    value: {
+      matchId,
+      mode,
+      difficulty,
+      duration,
+      startedAt,
+      endedAt,
+      playerScore,
+      botScore,
+      winner: winnerRaw,
+      patternsPlayed,
+      playerName,
+      opponentName,
+      stats
+    }
+  };
+}
+
 function getContentType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const map = {
@@ -120,7 +221,14 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await collectBody(req);
       const payload = JSON.parse(body || "{}");
-      const incomingId = String(payload.matchId || "").trim();
+      const parsed = sanitizeMatchPayload(payload);
+      if (!parsed.ok) {
+        sendJson(res, 400, { ok: false, message: parsed.message });
+        return;
+      }
+
+      const normalized = parsed.value;
+      const incomingId = normalized.matchId;
       const ip = getClientIp(req);
       const userAgent = req.headers["user-agent"] || null;
 
@@ -133,32 +241,36 @@ const server = http.createServer(async (req, res) => {
             ...matches[idx],
             ip: matches[idx].ip || ip,
             userAgent: matches[idx].userAgent || userAgent,
-            playerName: String(payload.playerName || matches[idx].playerName || "You"),
-            opponentName: payload.opponentName == null ? (matches[idx].opponentName || null) : String(payload.opponentName),
-            endedAt: payload.endedAt || new Date().toISOString(),
-            playerScore: Number(payload.playerScore || 0),
-            botScore: payload.botScore == null ? null : Number(payload.botScore),
-            winner: payload.winner == null ? null : String(payload.winner),
-            patternsPlayed: Number(payload.patternsPlayed || 0),
-            stats: payload.stats || null
+            playerName: normalized.playerName || matches[idx].playerName || "You",
+            opponentName: normalized.opponentName == null ? (matches[idx].opponentName || null) : normalized.opponentName,
+            mode: normalized.mode,
+            difficulty: normalized.difficulty,
+            duration: normalized.duration,
+            startedAt: normalized.startedAt,
+            endedAt: normalized.endedAt,
+            playerScore: normalized.playerScore,
+            botScore: normalized.botScore,
+            winner: normalized.winner,
+            patternsPlayed: normalized.patternsPlayed,
+            stats: normalized.stats
           };
         } else {
           matches.push({
-            matchId: incomingId || crypto.randomUUID(),
+            matchId: incomingId,
             ip,
             userAgent,
-            playerName: String(payload.playerName || "You"),
-            opponentName: payload.opponentName == null ? null : String(payload.opponentName),
-            mode: String(payload.mode || "solo"),
-            difficulty: String(payload.difficulty || "medium"),
-            duration: Number(payload.duration || 60),
-            startedAt: payload.startedAt || null,
-            endedAt: payload.endedAt || new Date().toISOString(),
-            playerScore: Number(payload.playerScore || 0),
-            botScore: payload.botScore == null ? null : Number(payload.botScore),
-            winner: payload.winner == null ? null : String(payload.winner),
-            patternsPlayed: Number(payload.patternsPlayed || 0),
-            stats: payload.stats || null
+            playerName: normalized.playerName,
+            opponentName: normalized.opponentName,
+            mode: normalized.mode,
+            difficulty: normalized.difficulty,
+            duration: normalized.duration,
+            startedAt: normalized.startedAt,
+            endedAt: normalized.endedAt,
+            playerScore: normalized.playerScore,
+            botScore: normalized.botScore,
+            winner: normalized.winner,
+            patternsPlayed: normalized.patternsPlayed,
+            stats: normalized.stats
           });
         }
 

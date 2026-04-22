@@ -27,6 +27,42 @@ const difficultyKey = DIFFICULTY[params.get("difficulty")] ? params.get("difficu
 const rawDuration = Number(params.get("duration"));
 const duration = Number.isFinite(rawDuration) ? clamp(Math.round(rawDuration), 60, 120) : 60;
 const config = DIFFICULTY[difficultyKey];
+const storageWarnings = new Set();
+
+function warnStorage(area, err) {
+  if (storageWarnings.has(area)) return;
+  storageWarnings.add(area);
+  console.warn(`[Storage] ${area} unavailable; using in-memory fallback.`, err?.name || err);
+}
+
+function safeGet(storage, key, area) {
+  try {
+    return storage.getItem(key);
+  } catch (err) {
+    warnStorage(area, err);
+    return null;
+  }
+}
+
+function safeSet(storage, key, value, area) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch (err) {
+    warnStorage(area, err);
+    return false;
+  }
+}
+
+function safeRemove(storage, key, area) {
+  try {
+    storage.removeItem(key);
+    return true;
+  } catch (err) {
+    warnStorage(area, err);
+    return false;
+  }
+}
 
 const boardEl = document.getElementById("board");
 const boardWrapEl = document.querySelector(".board-wrap");
@@ -49,8 +85,10 @@ if (mode === "solo") botCardEl.style.display = "none";
 
 const playerNameKey = "mindsnap_name_v1";
 const clientIdKey = "mindsnap_client_id_v1";
-let localClientId = sessionStorage.getItem(clientIdKey) || localStorage.getItem(clientIdKey) || "";
-const localPlayerName = (localStorage.getItem(playerNameKey) || "You").trim() || "You";
+let localClientId = safeGet(sessionStorage, clientIdKey, "session/clientId-read")
+  || safeGet(localStorage, clientIdKey, "local/clientId-read")
+  || "";
+const localPlayerName = (safeGet(localStorage, playerNameKey, "local/playerName-read") || "You").trim() || "You";
 
 if (!localClientId) {
   try {
@@ -58,12 +96,8 @@ if (!localClientId) {
   } catch {
     localClientId = `c_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   }
-  try {
-    sessionStorage.setItem(clientIdKey, localClientId);
-    localStorage.setItem(clientIdKey, localClientId);
-  } catch {
-    /* ignore */
-  }
+  safeSet(sessionStorage, clientIdKey, localClientId, "session/clientId-write");
+  safeSet(localStorage, clientIdKey, localClientId, "local/clientId-write");
 }
 
 const opponentNameEl = botCardEl?.querySelector("h2") || null;
@@ -791,25 +825,17 @@ function buildEndPayload() {
 
 function stashPendingEnd(payload) {
   state.pendingEndPayload = payload;
-  try {
-    localStorage.setItem(PENDING_END_KEY, JSON.stringify(payload));
-  } catch {
-    /* ignore */
-  }
+  safeSet(localStorage, PENDING_END_KEY, JSON.stringify(payload), "local/pending-write");
 }
 
 function clearPendingEnd() {
   state.pendingEndPayload = null;
-  try {
-    localStorage.removeItem(PENDING_END_KEY);
-  } catch {
-    /* ignore */
-  }
+  safeRemove(localStorage, PENDING_END_KEY, "local/pending-remove");
 }
 
 async function flushPendingFromStorage() {
   try {
-    const raw = localStorage.getItem(PENDING_END_KEY);
+    const raw = safeGet(localStorage, PENDING_END_KEY, "local/pending-read");
     if (!raw) return;
     const payload = JSON.parse(raw);
     if (!payload?.endedAt) return;
@@ -821,7 +847,7 @@ async function flushPendingFromStorage() {
     });
     if (!res.ok) return;
 
-    localStorage.removeItem(PENDING_END_KEY);
+    safeRemove(localStorage, PENDING_END_KEY, "local/pending-remove");
   } catch {
     /* ignore */
   }
