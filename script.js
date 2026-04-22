@@ -6,7 +6,7 @@ const { createClient } = window.supabase || {};
 const PREVIEW_MS = 1500;
 const BETWEEN_PATTERN_MS = 312;
 const PVP_START_COUNTDOWN_SEC = 3;
-const RESULT_REDIRECT_MS = 2600;
+const RESULT_REDIRECT_MS = 3000;
 
 const DIFFICULTY = {
   easy: { minGrid: 3, maxGrid: 5, density: 0.22 },
@@ -65,6 +65,10 @@ function safeRemove(storage, key, area) {
 }
 
 const boardEl = document.getElementById("board");
+const boardResultEl = document.getElementById("boardResult");
+const boardResultTitleEl = document.getElementById("boardResultTitle");
+const resultTableBodyEl = document.getElementById("resultTableBody");
+const backCountdownEl = document.getElementById("backCountdown");
 const boardWrapEl = document.querySelector(".board-wrap");
 const timerEl = document.getElementById("timer");
 const modeLabelEl = document.getElementById("modeLabel");
@@ -216,6 +220,7 @@ const state = {
   clientMatchId: null,
   pendingEndPayload: null,
   returnHomeId: null,
+  returnHomeTickId: null,
   player: {
     totalScore: 0,
     patternCount: 0,
@@ -386,11 +391,56 @@ function sendPvPFinal() {
   });
 }
 
-function scheduleReturnHome() {
+function hideBoardResult() {
+  if (!boardResultEl || !boardEl) return;
+  boardResultEl.hidden = true;
+  boardEl.hidden = false;
+  if (resultTableBodyEl) resultTableBodyEl.textContent = "";
+}
+
+function showBoardResult({ title, rows }) {
+  if (!boardResultEl || !boardEl || !boardResultTitleEl || !resultTableBodyEl) return;
+  setAllTilesDisabled(true);
+  boardEl.hidden = true;
+  boardResultEl.hidden = false;
+  boardResultTitleEl.textContent = title;
+  resultTableBodyEl.textContent = "";
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const playerCell = document.createElement("td");
+    const pointsCell = document.createElement("td");
+    playerCell.textContent = row.name;
+    pointsCell.textContent = String(row.points);
+    tr.appendChild(playerCell);
+    tr.appendChild(pointsCell);
+    resultTableBodyEl.appendChild(tr);
+  }
+}
+
+function scheduleReturnHome(seconds = 3) {
   clearTimeout(state.returnHomeId);
+  clearInterval(state.returnHomeTickId);
+
+  let secondsLeft = Math.max(1, Number(seconds) || 3);
+  if (backCountdownEl) {
+    backCountdownEl.textContent = `Going back to home in ${secondsLeft} second${secondsLeft === 1 ? "" : "s"}...`;
+  }
+
+  state.returnHomeTickId = setInterval(() => {
+    secondsLeft -= 1;
+    if (backCountdownEl) {
+      backCountdownEl.textContent = `Going back to home in ${Math.max(0, secondsLeft)} second${secondsLeft === 1 ? "" : "s"}...`;
+    }
+    if (secondsLeft <= 0) {
+      clearInterval(state.returnHomeTickId);
+      state.returnHomeTickId = null;
+    }
+  }, 1000);
+
   state.returnHomeId = setTimeout(() => {
     window.location.href = "index.html";
-  }, RESULT_REDIRECT_MS);
+  }, Math.max(RESULT_REDIRECT_MS, seconds * 1000));
 }
 
 function endPvPBecauseLeft() {
@@ -405,12 +455,15 @@ function endPvPBecauseLeft() {
   clearTimeout(state.player.nextId);
   setAllTilesDisabled(true);
   setBoardLoading(false);
+  overlayEl.classList.remove("show");
 
-  resultModeEl.textContent = "Multiplayer Result";
-  resultTitleEl.textContent = "Opponent Left";
-  resultBodyEl.textContent = `Final score: ${state.player.totalScore}. Returning to Home...`;
-  overlayEl.classList.add("show");
-  playAgainBtn.style.display = "";
+  showBoardResult({
+    title: "Opponent Left",
+    rows: [
+      { name: localPlayerName, points: state.player.totalScore },
+      { name: state.pvp.opponentName || "Opponent", points: state.pvp.opponentScore }
+    ]
+  });
   scheduleReturnHome();
 
   state.endedAt = new Date().toISOString();
@@ -478,11 +531,11 @@ function initPvPRealtime() {
       state.pvp.opponentFinal = final;
       state.pvp.opponentScore = Math.max(state.pvp.opponentScore || 0, final);
       updateHud();
-      if (!state.live && overlayEl.classList.contains("show")) {
+      if (!state.live && !boardResultEl.hidden) {
         const you = state.player.totalScore;
         const opp = state.pvp.opponentFinal;
-        resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
-        resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
+        const oppName = state.pvp.opponentName || "Opponent";
+        boardResultTitleEl.textContent = you === opp ? "Draw" : you > opp ? `${localPlayerName} Wins` : `${oppName} Wins`;
       }
     })
     .on("broadcast", { event: "leave" }, ({ payload }) => {
@@ -510,11 +563,15 @@ function initPvPRealtime() {
           cancelAnimationFrame(state.rafId);
           setAllTilesDisabled(true);
           setBoardLoading(false);
+          overlayEl.classList.remove("show");
 
-          resultModeEl.textContent = "Multiplayer Result";
-          resultTitleEl.textContent = "Connection Error";
-          resultBodyEl.textContent = "Realtime connection failed. Returning to Home...";
-          overlayEl.classList.add("show");
+          showBoardResult({
+            title: "Connection Error",
+            rows: [
+              { name: localPlayerName, points: state.player.totalScore },
+              { name: state.pvp.opponentName || "Opponent", points: state.pvp.opponentScore }
+            ]
+          });
           scheduleReturnHome();
         }
       }
@@ -886,30 +943,29 @@ function endMatch() {
   setAllTilesDisabled(true);
   setBoardLoading(false);
 
+  let title = "Result";
+  const rows = [];
+
   if (mode === "duel") {
-    resultModeEl.textContent = "Duel Result";
     const you = state.player.totalScore;
     const bot = state.bot.totalScore;
-    resultTitleEl.textContent = you === bot ? "Draw" : you > bot ? "You Win" : "Bot Wins";
-    resultBodyEl.textContent = `You: ${you} | Bot: ${bot}`;
+    title = you === bot ? "Draw" : you > bot ? `${localPlayerName} Wins` : "Bot Wins";
+    rows.push({ name: localPlayerName, points: you }, { name: "Bot", points: bot });
   } else if (mode === "pvp") {
-    resultModeEl.textContent = "Multiplayer Result";
     sendPvPFinal();
-
     const you = state.player.totalScore;
+    const oppName = state.pvp.opponentName || "Opponent";
     const opp = state.pvp.opponentFinal != null ? state.pvp.opponentFinal : state.pvp.opponentScore;
-    resultTitleEl.textContent = you === opp ? "Draw" : you > opp ? "You Win" : "You Lose";
-    resultBodyEl.textContent = `You: ${you} | ${state.pvp.opponentName || "Opponent"}: ${opp}`;
+    title = you === opp ? "Draw" : you > opp ? `${localPlayerName} Wins` : `${oppName} Wins`;
+    rows.push({ name: localPlayerName, points: you }, { name: oppName, points: opp });
   } else {
-    resultModeEl.textContent = "Solo Result";
-    resultTitleEl.textContent = "Time Up";
-    resultBodyEl.textContent = `Final score: ${state.player.totalScore}`;
+    const you = state.player.totalScore;
+    title = `${localPlayerName} Wins`;
+    rows.push({ name: localPlayerName, points: you });
   }
 
-  overlayEl.classList.add("show");
-  playAgainBtn.style.display = "";
-  resultBodyEl.textContent = `${resultBodyEl.textContent} Returning to Home...`;
-  scheduleReturnHome();
+  showBoardResult({ title, rows });
+  scheduleReturnHome(3);
 
   // Queue and send ONLY after match end.
   state.endedAt = new Date().toISOString();
@@ -929,6 +985,8 @@ function resetMatch() {
   clearTimeout(state.pvp.countdownId);
   clearTimeout(state.pvp.startTimeoutId);
   clearTimeout(state.returnHomeId);
+  clearInterval(state.returnHomeTickId);
+  state.returnHomeTickId = null;
   clearTimeout(state.player.pauseId);
   clearTimeout(state.player.nextId);
   clearTimeout(state.bot.pauseId);
@@ -965,6 +1023,7 @@ function resetMatch() {
 
   overlayEl.classList.remove("show");
   playAgainBtn.style.display = "";
+  hideBoardResult();
   setBoardLoading(false);
   updateHud();
 
@@ -1035,6 +1094,8 @@ flushPendingFromStorage();
 
 function exitToHome() {
   clearTimeout(state.returnHomeId);
+  clearInterval(state.returnHomeTickId);
+  state.returnHomeTickId = null;
   try {
     state.pvp.channel?.send({ type: "broadcast", event: "leave", payload: { fromUserId: localClientId } });
   } catch {

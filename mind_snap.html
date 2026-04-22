@@ -36,6 +36,19 @@
 
       <section class="board-wrap" aria-label="MindSnap game area">
         <div id="board" class="board" role="grid" aria-label="Memory grid"></div>
+        <section id="boardResult" class="board-result" hidden aria-live="polite">
+          <h2 id="boardResultTitle">Result</h2>
+          <table class="result-table" aria-label="Final points table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Points</th>
+              </tr>
+            </thead>
+            <tbody id="resultTableBody"></tbody>
+          </table>
+          <p id="backCountdown" class="back-countdown">Going back to home in 3 seconds...</p>
+        </section>
       </section>
 
       <aside class="score-card" id="botCard">
