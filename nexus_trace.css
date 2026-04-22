@@ -111,6 +111,10 @@ body {
   backdrop-filter: blur(5px);
 }
 
+.layer[hidden] {
+  display: none !important;
+}
+
 .waiting-layer h2,
 .result-layer h2 {
   margin: 0.2rem 0;
