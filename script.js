@@ -5,6 +5,7 @@ const { createClient } = window.supabase || {};
 
 const PREVIEW_MS = 1500;
 const BETWEEN_PATTERN_MS = 312;
+const PVP_START_COUNTDOWN_SEC = 3;
 
 const DIFFICULTY = {
   easy: { minGrid: 3, maxGrid: 5, density: 0.22 },
@@ -169,7 +170,9 @@ let supaClient = null;
 const state = {
   live: false,
   timeLeft: duration,
+  deadlineMs: 0,
   rafId: null,
+  hardEndId: null,
   lastTick: 0,
   tiles: [],
   reported: false,
@@ -211,6 +214,8 @@ const state = {
     opponentPatternNumber: 0,
     opponentFinal: null,
     myFinal: null,
+    countdownId: null,
+    startTimeoutId: null,
     started: false
   }
 };
@@ -346,8 +351,12 @@ function sendPvPFinal() {
 }
 
 function endPvPBecauseLeft() {
-  if (!state.pvp.enabled || !state.live) return;
+  if (!state.pvp.enabled) return;
   state.live = false;
+  state.pvp.started = false;
+  clearTimeout(state.hardEndId);
+  clearTimeout(state.pvp.countdownId);
+  clearTimeout(state.pvp.startTimeoutId);
   cancelAnimationFrame(state.rafId);
   clearTimeout(state.player.pauseId);
   clearTimeout(state.player.nextId);
@@ -358,6 +367,7 @@ function endPvPBecauseLeft() {
   resultTitleEl.textContent = "Opponent Left";
   resultBodyEl.textContent = `Final score: ${state.player.totalScore}`;
   overlayEl.classList.add("show");
+  playAgainBtn.style.display = "";
 
   state.endedAt = new Date().toISOString();
   stashPendingEnd(buildEndPayload());
@@ -474,33 +484,61 @@ function setBoardLoading(loading) {
   boardWrapEl?.classList.toggle("loading", loading);
 }
 
+function syncHudTimerFromDeadline() {
+  const remainingMs = state.deadlineMs - Date.now();
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  if (seconds !== state.timeLeft) {
+    state.timeLeft = seconds;
+    updateHud();
+  }
+  return remainingMs;
+}
+
+function scheduleHardEnd() {
+  clearTimeout(state.hardEndId);
+  const delay = Math.max(0, state.deadlineMs - Date.now());
+  state.hardEndId = setTimeout(() => {
+    if (state.live) endMatch();
+  }, delay + 10);
+}
+
+function showPvPStartCountdown(startAtMs) {
+  clearTimeout(state.pvp.countdownId);
+  overlayEl.classList.add("show");
+  resultModeEl.textContent = "Multiplayer";
+  resultTitleEl.textContent = "Get Ready";
+  playAgainBtn.style.display = "none";
+
+  const epoch = matchEpoch;
+  const tick = () => {
+    if (epoch !== matchEpoch || mode !== "pvp") return;
+    const leftMs = startAtMs - Date.now();
+    const leftSec = Math.max(0, Math.ceil(leftMs / 1000));
+    resultBodyEl.textContent = leftMs > 0 ? `Starting in ${leftSec}...` : "Go!";
+    timerEl.textContent = leftMs > 0 ? String(leftSec) : String(duration);
+    if (leftMs <= 0) return;
+    state.pvp.countdownId = setTimeout(tick, 90);
+  };
+  tick();
+}
+
 // rAF timer (drift-safe even if a frame is dropped).
 function startTimer() {
   cancelAnimationFrame(state.rafId);
   const epoch = matchEpoch;
 
-  function tick(now) {
+  function tick() {
     if (!state.live || epoch !== matchEpoch) return;
-
-    const delta = now - state.lastTick;
-    if (delta >= 1000) {
-      const seconds = Math.floor(delta / 1000);
-      state.timeLeft = Math.max(0, state.timeLeft - seconds);
-      state.lastTick += seconds * 1000;
-      updateHud();
-      if (state.timeLeft <= 0) {
-        endMatch();
-        return;
-      }
+    const remainingMs = syncHudTimerFromDeadline();
+    if (remainingMs <= 0) {
+      endMatch();
+      return;
     }
     state.rafId = requestAnimationFrame(tick);
   }
 
-  state.rafId = requestAnimationFrame((now) => {
-    if (epoch !== matchEpoch) return;
-    state.lastTick = now;
-    state.rafId = requestAnimationFrame(tick);
-  });
+  syncHudTimerFromDeadline();
+  state.rafId = requestAnimationFrame(tick);
 }
 
 function createPatternState(patternNumber) {
@@ -793,6 +831,9 @@ function endMatch() {
   if (!state.live) return;
   state.live = false;
 
+  clearTimeout(state.hardEndId);
+  clearTimeout(state.pvp.countdownId);
+  clearTimeout(state.pvp.startTimeoutId);
   cancelAnimationFrame(state.rafId);
   clearTimeout(state.player.pauseId);
   clearTimeout(state.player.nextId);
@@ -824,6 +865,7 @@ function endMatch() {
   }
 
   overlayEl.classList.add("show");
+  playAgainBtn.style.display = "";
 
   // Queue and send ONLY after match end.
   state.endedAt = new Date().toISOString();
@@ -839,6 +881,9 @@ function resetMatch() {
   botWorker?.postMessage({ type: "stop" });
 
   cancelAnimationFrame(state.rafId);
+  clearTimeout(state.hardEndId);
+  clearTimeout(state.pvp.countdownId);
+  clearTimeout(state.pvp.startTimeoutId);
   clearTimeout(state.player.pauseId);
   clearTimeout(state.player.nextId);
   clearTimeout(state.bot.pauseId);
@@ -849,6 +894,7 @@ function resetMatch() {
 
   state.live = mode !== "pvp";
   state.timeLeft = duration;
+  state.deadlineMs = 0;
   state.reported = false;
   state.startedAt = mode === "pvp" && state.pvp.startAtMs
     ? new Date(state.pvp.startAtMs).toISOString()
@@ -861,6 +907,7 @@ function resetMatch() {
   state.player.patternCount = 0;
   state.player.current = null;
   state.player.accepting = false;
+  state.pvp.started = false;
 
   state.bot.totalScore = 0;
   state.bot.patternCount = 0;
@@ -872,17 +919,27 @@ function resetMatch() {
   state.telemetry.wrong = 0;
 
   overlayEl.classList.remove("show");
+  playAgainBtn.style.display = "";
   setBoardLoading(false);
   updateHud();
 
   if (mode === "pvp") {
-    // Wait until the synchronized start timestamp.
-    const delay = Math.max(0, state.pvp.startAtMs - Date.now());
+    // Wait until the synchronized start timestamp and show 3..2..1 countdown.
+    const fallbackStart = Date.now() + PVP_START_COUNTDOWN_SEC * 1000;
+    const startAtMs = Number(state.pvp.startAtMs) > 0 ? Number(state.pvp.startAtMs) : fallbackStart;
+    const delay = Math.max(0, startAtMs - Date.now());
+    state.pvp.startAtMs = startAtMs;
+    state.startedAt = new Date(startAtMs).toISOString();
     setAllTilesDisabled(true);
-    setTimeout(() => {
+    showPvPStartCountdown(startAtMs);
+    state.pvp.startTimeoutId = setTimeout(() => {
       if (mode !== "pvp") return;
+      overlayEl.classList.remove("show");
+      playAgainBtn.style.display = "";
       state.live = true;
       state.pvp.started = true;
+      state.deadlineMs = startAtMs + duration * 1000;
+      scheduleHardEnd();
       startTimer();
       startPlayerPattern();
       updateHud();
@@ -890,6 +947,8 @@ function resetMatch() {
     return;
   }
 
+  state.deadlineMs = Date.now() + duration * 1000;
+  scheduleHardEnd();
   startTimer();
   startPlayerPattern();
   if (mode === "duel") startBotPattern();
@@ -931,7 +990,7 @@ flushPendingFromStorage();
 
 function exitToHome() {
   try {
-    state.pvp.channel?.send({ type: "broadcast", event: "leave", payload: { clientId: localClientId } });
+    state.pvp.channel?.send({ type: "broadcast", event: "leave", payload: { fromUserId: localClientId } });
   } catch {
     /* ignore */
   }
