@@ -90,7 +90,11 @@
         </section>
       </section>
 
-      <section class="home-card nexus-card">
+      <section class="home-card nexus-card side-card">
+        <div class="card-top">
+          <p class="eyebrow">FLUID MEMORY RACER</p>
+          <button id="nexus-help-btn" class="help-btn nexus-help-btn" type="button" aria-label="How to play Nexus Trace">?</button>
+        </div>
         <h2 class="tap-title">Nexus Trace</h2>
         <p class="nexus-tagline">Fluid path memory racing with solo and ghost multiplayer.</p>
         <label class="nexus-toggle">
@@ -104,7 +108,7 @@
         </div>
       </section>
 
-      <section class="home-card tap-card">
+      <section class="home-card tap-card side-card">
         <h2 class="tap-title">Tap Green</h2>
         <div class="action-row tap-action-row">
           <button id="tapgreen-btn" class="action-btn tap-green-btn">Start Tap Green</button>
@@ -131,6 +135,25 @@
           <button id="tour-prev" type="button" class="tour-btn ghost">Back</button>
           <span id="tour-step" class="tour-step"></span>
           <button id="tour-next" type="button" class="tour-btn">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="nexus-tour-overlay" class="tour-overlay nexus-tour-overlay" hidden>
+      <div class="tour-card nexus-tour-card" role="dialog" aria-modal="true" aria-labelledby="nexus-tour-title">
+        <div class="tour-head">
+          <h2 id="nexus-tour-title">How To Play Nexus Trace</h2>
+          <button id="nexus-tour-close" class="tour-close" type="button" aria-label="Close Nexus tutorial">x</button>
+        </div>
+        <div class="nexus-tour-stage">
+          <p id="nexus-tour-step-kicker" class="nexus-tour-step-kicker"></p>
+          <h3 id="nexus-tour-step-title" class="nexus-tour-step-title"></h3>
+          <p id="nexus-tour-step-body" class="nexus-tour-step-body"></p>
+        </div>
+        <div class="tour-controls">
+          <button id="nexus-tour-prev" type="button" class="tour-btn ghost">Back</button>
+          <span id="nexus-tour-step" class="tour-step"></span>
+          <button id="nexus-tour-next" type="button" class="tour-btn">Next</button>
         </div>
       </div>
     </div>
@@ -913,10 +936,19 @@
       const tourNext = document.getElementById("tour-next");
       const tourClose = document.getElementById("tour-close");
       const helpBtn = document.getElementById("help-btn");
+      const nexusHelpBtn = document.getElementById("nexus-help-btn");
       const dimTop = document.getElementById("tour-dim-top");
       const dimRight = document.getElementById("tour-dim-right");
       const dimBottom = document.getElementById("tour-dim-bottom");
       const dimLeft = document.getElementById("tour-dim-left");
+      const nexusTourOverlay = document.getElementById("nexus-tour-overlay");
+      const nexusTourClose = document.getElementById("nexus-tour-close");
+      const nexusTourPrev = document.getElementById("nexus-tour-prev");
+      const nexusTourNext = document.getElementById("nexus-tour-next");
+      const nexusTourStep = document.getElementById("nexus-tour-step");
+      const nexusTourStepKicker = document.getElementById("nexus-tour-step-kicker");
+      const nexusTourStepTitle = document.getElementById("nexus-tour-step-title");
+      const nexusTourStepBody = document.getElementById("nexus-tour-step-body");
 
       const steps = [
         {
@@ -942,6 +974,29 @@
       ];
 
       let currentStep = 0;
+      let currentNexusStep = 0;
+      const nexusSteps = [
+        {
+          kicker: "STEP 1",
+          title: "Observe the spark path",
+          body: "A neon spark runs through anchor dots and draws the exact trajectory you must remember."
+        },
+        {
+          kicker: "STEP 2",
+          title: "Replay immediately",
+          body: "As soon as observe ends, tap dots in the same order. Fast, clean execution gives the highest score."
+        },
+        {
+          kicker: "STEP 3",
+          title: "Pressure scaling",
+          body: "Enable Blind Intersections to hide anchors during replay and rely fully on spatial memory."
+        },
+        {
+          kicker: "STEP 4",
+          title: "Multiplayer chase",
+          body: "In PvP, both players get the same sequence. Track your ghost race and finish with a higher score before 60 seconds."
+        }
+      ];
 
       function getImageFrameRect() {
         const stage = tourStage.getBoundingClientRect();
@@ -1024,11 +1079,44 @@
         tourOverlay.hidden = true;
       }
 
+      function applyNexusStep(index) {
+        const safeIndex = Math.max(0, Math.min(index, nexusSteps.length - 1));
+        currentNexusStep = safeIndex;
+        const step = nexusSteps[safeIndex];
+        nexusTourStepKicker.textContent = step.kicker;
+        nexusTourStepTitle.textContent = step.title;
+        nexusTourStepBody.textContent = step.body;
+        nexusTourStep.textContent = `Step ${safeIndex + 1} / ${nexusSteps.length}`;
+        nexusTourPrev.disabled = safeIndex === 0;
+        nexusTourNext.textContent = safeIndex === nexusSteps.length - 1 ? "Finish" : "Next";
+      }
+
+      function openNexusTour() {
+        nexusTourOverlay.hidden = false;
+        applyNexusStep(0);
+      }
+
+      function closeNexusTour() {
+        nexusTourOverlay.hidden = true;
+      }
+
       // Keep onboarding hidden until the user explicitly opens it.
       tourOverlay.hidden = true;
       helpBtn.addEventListener("click", openTour);
+      nexusHelpBtn.addEventListener("click", openNexusTour);
       tourClose.addEventListener("click", closeTour);
+      nexusTourClose.addEventListener("click", closeNexusTour);
       tourPrev.addEventListener("click", closeTour);
+      nexusTourPrev.addEventListener("click", () => {
+        applyNexusStep(currentNexusStep - 1);
+      });
+      nexusTourNext.addEventListener("click", () => {
+        if (currentNexusStep === nexusSteps.length - 1) {
+          closeNexusTour();
+          return;
+        }
+        applyNexusStep(currentNexusStep + 1);
+      });
       tourNext.addEventListener("click", () => {
         if (currentStep === steps.length - 1) {
           closeTour();
@@ -1056,6 +1144,11 @@
       tourOverlay.addEventListener("click", (event) => {
         if (event.target === tourOverlay) {
           closeTour();
+        }
+      });
+      nexusTourOverlay.addEventListener("click", (event) => {
+        if (event.target === nexusTourOverlay) {
+          closeNexusTour();
         }
       });
 

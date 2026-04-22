@@ -393,6 +393,31 @@ body::after {
   animation: cardScan 8s linear infinite;
 }
 
+.home-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.home-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 30px 72px rgba(2, 8, 18, 0.62);
+}
+
+.home-card:hover::before {
+  opacity: 0.84;
+}
+
+.home-card:hover::after {
+  animation-duration: 5.5s;
+}
+
+.side-card {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.9rem;
+}
+
 .tap-card {
   border-color: rgba(136, 255, 169, 0.35);
   animation-delay: 0.15s, 0.5s;
@@ -416,6 +441,7 @@ body::after {
 .nexus-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   font-size: 0.92rem;
   color: var(--ink-soft);
@@ -428,6 +454,7 @@ body::after {
 
 .nexus-action-row {
   margin-top: auto;
+  width: min(360px, 100%);
 }
 
 .tap-title {
@@ -439,6 +466,7 @@ body::after {
 .tap-action-row {
   grid-template-columns: 1fr;
   margin-top: 0;
+  width: min(300px, 100%);
 }
 
 .tap-green-btn {
@@ -699,6 +727,41 @@ h1 {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
 }
 
+.nexus-tour-overlay {
+  z-index: 24;
+}
+
+.nexus-tour-card {
+  width: min(620px, 100%);
+}
+
+.nexus-tour-stage {
+  margin-top: 0.7rem;
+  border: 1px solid rgba(145, 220, 255, 0.26);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(11, 26, 45, 0.8), rgba(8, 20, 36, 0.74));
+  padding: 0.95rem;
+  text-align: left;
+}
+
+.nexus-tour-step-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: rgba(170, 230, 255, 0.86);
+}
+
+.nexus-tour-step-title {
+  margin: 0.4rem 0 0.3rem;
+  font-size: clamp(1.1rem, 3.2vw, 1.4rem);
+}
+
+.nexus-tour-step-body {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.48;
+}
+
 .tour-head {
   display: flex;
   align-items: center;
@@ -886,6 +949,15 @@ h1 {
 
   .home-card {
     animation: enter 0.55s ease-out both;
+  }
+
+  .side-card {
+    align-items: stretch;
+    text-align: left;
+  }
+
+  .nexus-toggle {
+    justify-content: flex-start;
   }
 
   .tour-controls {
