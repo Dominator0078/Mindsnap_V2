@@ -121,6 +121,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   transition: opacity 180ms ease, filter 180ms ease;
   touch-action: none;
 }
@@ -146,6 +147,9 @@ body {
 }
 
 .board-result {
+  position: absolute;
+  inset: 0;
+  margin: auto;
   width: min(100%, 78vh, 560px);
   aspect-ratio: 1 / 1;
   border: 1px solid var(--line);

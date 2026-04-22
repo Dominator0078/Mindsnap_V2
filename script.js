@@ -457,13 +457,12 @@ function endPvPBecauseLeft() {
   setBoardLoading(false);
   overlayEl.classList.remove("show");
 
-  showBoardResult({
-    title: "Opponent Left",
-    rows: [
-      { name: localPlayerName, points: state.player.totalScore },
-      { name: state.pvp.opponentName || "Opponent", points: state.pvp.opponentScore }
-    ]
-  });
+  // Result panel in board area is reserved for match-end only (timer complete).
+  resultModeEl.textContent = "Multiplayer Result";
+  resultTitleEl.textContent = "Opponent Left";
+  resultBodyEl.textContent = "Opponent disconnected. Returning to Home...";
+  overlayEl.classList.add("show");
+  playAgainBtn.style.display = "";
   scheduleReturnHome();
 
   state.endedAt = new Date().toISOString();
@@ -565,13 +564,12 @@ function initPvPRealtime() {
           setBoardLoading(false);
           overlayEl.classList.remove("show");
 
-          showBoardResult({
-            title: "Connection Error",
-            rows: [
-              { name: localPlayerName, points: state.player.totalScore },
-              { name: state.pvp.opponentName || "Opponent", points: state.pvp.opponentScore }
-            ]
-          });
+          // Result panel in board area is reserved for match-end only (timer complete).
+          resultModeEl.textContent = "Multiplayer Result";
+          resultTitleEl.textContent = "Connection Error";
+          resultBodyEl.textContent = "Realtime connection failed. Returning to Home...";
+          overlayEl.classList.add("show");
+          playAgainBtn.style.display = "";
           scheduleReturnHome();
         }
       }
