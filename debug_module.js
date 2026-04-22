@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 /**
  * MindSnap Debug Module (optional)
@@ -15,57 +15,59 @@ const DEBUG_MODE = true;
 function debugLog(category, message, data) {
   if (!DEBUG_MODE) return;
   const timestamp = new Date().toLocaleTimeString();
-  const prefix = `[${timestamp}] 🎮 ${category}`;
+  const prefix = `[${timestamp}] ðŸŽ® ${category}`;
   if (typeof data !== "undefined") console.log(`${prefix}: ${message}`, data);
   else console.log(`${prefix}: ${message}`);
 }
 
 function debugError(category, error, context) {
   const err = error instanceof Error ? error : new Error(String(error));
-  console.error(`❌ [${category}] ${err.message}`, context || err);
+  console.error(`âŒ [${category}] ${err.message}`, context || err);
 }
 
 function verifySupabaseLoaded() {
-  if (typeof supabase === "undefined") {
-    console.error("❌ Supabase library not loaded! Check CDN link in HTML.");
+  // `script.js` runs as a module, so Supabase isn't a global. Use `window.__mindsnap` to verify load.
+  const ctx = window.__mindsnap;
+  if (!ctx) {
+    console.error("❌ Game runtime not loaded (window.__mindsnap missing). Check script.js module load.");
     return false;
   }
-  debugLog("INIT", "✅ Supabase library loaded");
+  debugLog("INIT", "✅ Game runtime loaded");
   return true;
 }
 
 function runStartupDiagnostics() {
   if (!DEBUG_MODE) return;
 
-  console.log("🎮 MindSnap Startup Diagnostics");
+  console.log("ðŸŽ® MindSnap Startup Diagnostics");
   console.log("================================");
 
-  const supabaseOk = verifySupabaseLoaded();
-  console.log(supabaseOk ? "✅ Supabase" : "❌ Supabase");
+  const runtimeOk = verifySupabaseLoaded();
+  console.log(runtimeOk ? "✅ Runtime" : "❌ Runtime");
 
   try {
     const ctx = window.__mindsnap;
     const modeLabel = ctx?.mode || "(unknown)";
-    console.log(`✅ Mode: ${modeLabel}`);
+    console.log(`âœ… Mode: ${modeLabel}`);
     if (modeLabel === "pvp") {
-      console.log(`✅ PvP matchId: ${ctx?.state?.pvp?.matchId}`);
-      console.log(`✅ PvP seed: ${ctx?.state?.pvp?.seed}`);
-      console.log(`✅ Local clientId: ${ctx?.localClientId || "(missing)"}`);
-      console.log(`✅ Local name: ${ctx?.localPlayerName || "(missing)"}`);
-      console.log(`✅ OpponentId: ${ctx?.state?.pvp?.opponentId}`);
-      console.log(`✅ OpponentName: ${ctx?.state?.pvp?.opponentName}`);
+      console.log(`âœ… PvP matchId: ${ctx?.state?.pvp?.matchId}`);
+      console.log(`âœ… PvP seed: ${ctx?.state?.pvp?.seed}`);
+      console.log(`âœ… Local clientId: ${ctx?.localClientId || "(missing)"}`);
+      console.log(`âœ… Local name: ${ctx?.localPlayerName || "(missing)"}`);
+      console.log(`âœ… OpponentId: ${ctx?.state?.pvp?.opponentId}`);
+      console.log(`âœ… OpponentName: ${ctx?.state?.pvp?.opponentName}`);
     }
   } catch {
-    console.log("❌ Mode: (missing)");
+    console.log("âŒ Mode: (missing)");
   }
 
   try {
     const hasBoard = !!document.getElementById("board");
     const hasTimer = !!document.getElementById("timer");
     const hasOverlay = !!document.getElementById("overlay");
-    console.log(`✅ Board element: ${hasBoard ? "found" : "missing"}`);
-    console.log(`✅ Timer element: ${hasTimer ? "found" : "missing"}`);
-    console.log(`✅ Overlay element: ${hasOverlay ? "found" : "missing"}`);
+    console.log(`âœ… Board element: ${hasBoard ? "found" : "missing"}`);
+    console.log(`âœ… Timer element: ${hasTimer ? "found" : "missing"}`);
+    console.log(`âœ… Overlay element: ${hasOverlay ? "found" : "missing"}`);
   } catch {
     /* ignore */
   }
@@ -86,7 +88,7 @@ function installPvPDebugHooks() {
       debugLog("PVP", "Channel not ready yet (will rely on internal logs)");
     }
 
-    debugLog("INIT", "✅ PvP debug hooks installed");
+    debugLog("INIT", "âœ… PvP debug hooks installed");
   } catch (err) {
     debugError("INIT", err, { context: "installPvPDebugHooks failed" });
   }
@@ -102,3 +104,4 @@ document.addEventListener(
 );
 
 debugLog("INIT", "Debug module loaded");
+

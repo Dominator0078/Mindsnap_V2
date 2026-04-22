@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.10";
+const { createClient } = window.supabase || {};
 // Module scripts are strict by default.
 
 // MindSnap Duels - Game Zone runtime (touch-first, end-of-match upload).
@@ -367,6 +367,10 @@ function endPvPBecauseLeft() {
 function initPvPRealtime() {
   if (!state.pvp.enabled || !state.pvp.matchId) return;
   if (state.pvp.channel) return;
+  if (typeof createClient !== "function") {
+    console.warn("[MP] Supabase SDK not loaded; PvP realtime unavailable.");
+    return;
+  }
   if (!supaClient) {
     // Disable auth session persistence to avoid storage access being blocked by tracking protection.
     supaClient = createClient(SUPABASE_URL, SUPABASE_KEY, {

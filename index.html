@@ -97,8 +97,9 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module">
-      import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.10";
+      const { createClient } = window.supabase;
 
       const ghostGrid = document.getElementById("ghost-grid");
       const ghostMatch = document.getElementById("ghost-match");
@@ -520,6 +521,11 @@
         if (scanning) return;
         if (!playerName) {
           openNameModal();
+          return;
+        }
+        if (typeof createClient !== "function") {
+          setRadar(true);
+          radarSub.textContent = "Supabase SDK failed to load. Check network/ad blocker and retry.";
           return;
         }
 
