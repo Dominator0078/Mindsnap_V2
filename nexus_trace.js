@@ -223,7 +223,7 @@ function makeRoundData(round) {
   const w = canvasEl.width;
   const h = canvasEl.height;
   const margin = Math.max(38, Math.min(w, h) * 0.09);
-  const anchorCount = clamp(11 + Math.floor(round * 0.75), 11, 24);
+  const anchorCount = clamp(8 + Math.floor(round * 0.45), 8, 16);
   const anchors = [];
   let attempts = 0;
 
@@ -234,7 +234,7 @@ function makeRoundData(round) {
     const tooClose = anchors.some((p) => {
       const dx = p.x - x;
       const dy = p.y - y;
-      return dx * dx + dy * dy < 32 * 32;
+      return dx * dx + dy * dy < 54 * 54;
     });
     if (!tooClose) anchors.push({ x, y });
   }
@@ -246,7 +246,7 @@ function makeRoundData(round) {
     });
   }
 
-  const pathLength = clamp(6 + Math.floor(round * 0.55), 6, 20);
+  const pathLength = clamp(5 + Math.floor(round * 0.4), 5, 12);
   const path = [];
   for (let i = 0; i < pathLength; i += 1) {
     path.push(Math.floor(rng() * anchors.length));
@@ -293,7 +293,7 @@ function getPointCanvas(event) {
 function nearestAnchorIndex(point) {
   if (!state.roundData) return -1;
   const anchors = state.roundData.anchors;
-  const radius = Math.max(24, Math.min(canvasEl.width, canvasEl.height) * 0.032);
+  const radius = Math.max(30, Math.min(canvasEl.width, canvasEl.height) * 0.044);
   const radiusSq = radius * radius;
   let best = -1;
   let bestSq = radiusSq;
@@ -344,7 +344,7 @@ function onCanvasTap(event) {
 }
 
 function drawAnchor(point, alpha = 1) {
-  const r = 4.5;
+  const r = 7;
   ctx.beginPath();
   ctx.arc(point.x, point.y, r, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(211, 227, 255, ${alpha})`;

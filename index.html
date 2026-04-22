@@ -10,6 +10,14 @@
     <link rel="stylesheet" href="home.css" />
   </head>
   <body>
+    <div id="site-loader" class="site-loader" role="status" aria-live="polite" aria-label="Loading MindSnap">
+      <div class="site-loader-card">
+        <p class="site-loader-kicker">PREPARING EXPERIENCE</p>
+        <h2>MindSnap Arena</h2>
+        <div class="site-loader-line"><span></span></div>
+      </div>
+    </div>
+
     <div id="ghost-match" class="ghost-match" aria-hidden="true">
       <div id="ghost-grid" class="ghost-grid"></div>
     </div>
@@ -130,6 +138,25 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module">
       const { createClient } = window.supabase;
+      const bootAt = performance.now();
+      const siteLoader = document.getElementById("site-loader");
+
+      function hideSiteLoader() {
+        if (!siteLoader || siteLoader.hidden) return;
+        siteLoader.classList.add("is-hidden");
+        setTimeout(() => {
+          siteLoader.hidden = true;
+        }, 520);
+      }
+
+      window.addEventListener("load", () => {
+        const elapsed = performance.now() - bootAt;
+        const minVisibleMs = 700;
+        const wait = Math.max(0, minVisibleMs - elapsed);
+        setTimeout(hideSiteLoader, wait);
+      });
+
+      setTimeout(hideSiteLoader, 3200);
 
       const ghostGrid = document.getElementById("ghost-grid");
       const ghostMatch = document.getElementById("ghost-match");
@@ -236,24 +263,24 @@
           cols = Number(ghostGrid.style.getPropertyValue("--cols")) || cols;
           rows = Number(ghostGrid.style.getPropertyValue("--rows")) || rows;
 
-          const clusterSize = pickInt(4, 6);
+          const clusterSize = pickInt(5, 8);
           const cluster = pickCluster(clusterSize, rows, cols);
           const tiles = ghostGrid.children;
 
           // Preview flash (pattern shown)
           for (const idx of cluster) tiles[idx]?.classList.add("is-preview");
-          await sleep(1500);
+          await sleep(1200);
           for (const idx of cluster) tiles[idx]?.classList.remove("is-preview");
 
           // Correct taps one-by-one (pattern recalled)
           for (const idx of cluster) {
             tiles[idx]?.classList.add("is-correct");
-            await sleep(pickInt(90, 140));
+            await sleep(pickInt(70, 120));
           }
 
-          await sleep(1000);
+          await sleep(820);
           clearGhostMarks();
-          await sleep(pickInt(220, 420));
+          await sleep(pickInt(140, 260));
         }
       }
 
