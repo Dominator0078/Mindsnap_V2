@@ -418,6 +418,12 @@ function showBoardResult({ title, rows }) {
   }
 }
 
+function forceGameplayBoardView() {
+  if (!boardResultEl || !boardEl) return;
+  boardResultEl.hidden = true;
+  boardEl.hidden = false;
+}
+
 function scheduleReturnHome(seconds = 3) {
   clearTimeout(state.returnHomeId);
   clearInterval(state.returnHomeTickId);
@@ -629,9 +635,11 @@ function showPvPStartCountdown(startAtMs) {
 function startTimer() {
   cancelAnimationFrame(state.rafId);
   const epoch = matchEpoch;
+  forceGameplayBoardView();
 
   function tick() {
     if (!state.live || epoch !== matchEpoch) return;
+    forceGameplayBoardView();
     const remainingMs = syncHudTimerFromDeadline();
     if (remainingMs <= 0) {
       endMatch();
@@ -668,6 +676,7 @@ function createPatternState(patternNumber) {
 function startPlayerPattern() {
   if (!state.live) return;
   const epoch = matchEpoch;
+  forceGameplayBoardView();
 
   setBoardLoading(false);
   state.player.patternCount += 1;
@@ -712,6 +721,7 @@ function finishPlayerPattern() {
 function onPlayerTileClick(index) {
   const current = state.player.current;
   if (!state.live || !current) return;
+  forceGameplayBoardView();
   if (!state.player.accepting) return;
   if (current.clicksUsed >= current.clickLimit) return;
   if (current.clicked.has(index)) return;
@@ -1022,6 +1032,7 @@ function resetMatch() {
   overlayEl.classList.remove("show");
   playAgainBtn.style.display = "";
   hideBoardResult();
+  forceGameplayBoardView();
   setBoardLoading(false);
   updateHud();
 
