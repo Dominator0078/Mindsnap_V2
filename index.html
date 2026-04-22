@@ -81,6 +81,22 @@
           <ul id="history-list" class="history-list"></ul>
         </section>
       </section>
+
+      <section class="home-card tap-card">
+        <div class="card-top">
+          <p class="eyebrow">REFLEX CHALLENGE</p>
+        </div>
+        <h2 class="tap-title">Tap Green</h2>
+        <p class="tagline">Tap only when it turns green. Red taps count as early mistakes. Built for burst-speed reactions.</p>
+        <ul class="tap-rules">
+          <li>Wait time before green is random (1.0s to 4.0s).</li>
+          <li>Tap green: +1 score and reaction time is recorded.</li>
+          <li>Tap red: -1 score and marked as Early Tap.</li>
+        </ul>
+        <div class="action-row tap-action-row">
+          <button id="tapgreen-btn" class="action-btn tap-green-btn">Start Tap Green</button>
+        </div>
+      </section>
     </main>
 
     <div id="tour-overlay" class="tour-overlay" hidden>
@@ -342,7 +358,7 @@
 
       function historyScoreLabel(match) {
         const yourScore = Number(match?.playerScore || 0);
-        if (match?.mode === "solo") return `Score ${yourScore}`;
+        if (match?.mode === "solo" || match?.mode === "reaction") return `Score ${yourScore}`;
         const other = match?.botScore == null ? 0 : Number(match.botScore);
         return `You ${yourScore} vs ${other}`;
       }
@@ -782,6 +798,10 @@
         window.location.href = target;
       }
 
+      function launchTapGreen() {
+        window.location.href = "tap_green.html";
+      }
+
       const tourOverlay = document.getElementById("tour-overlay");
       const tourStage = document.getElementById("tour-stage");
       const tourImage = tourStage.querySelector("img");
@@ -941,6 +961,7 @@
       document.getElementById("solo-btn").addEventListener("click", () => launch("solo"));
       document.getElementById("duel-btn").addEventListener("click", () => launch("duel"));
       document.getElementById("multi-btn").addEventListener("click", startScanning);
+      document.getElementById("tapgreen-btn").addEventListener("click", launchTapGreen);
     </script>
   </body>
 </html>

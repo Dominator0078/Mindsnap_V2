@@ -8,8 +8,8 @@ const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, "data");
 const MATCH_FILE = path.join(DATA_DIR, "matches.json");
 const fsp = fs.promises;
-const MODE_SET = new Set(["solo", "duel", "pvp"]);
-const DIFFICULTY_SET = new Set(["easy", "medium", "hard"]);
+const MODE_SET = new Set(["solo", "duel", "pvp", "reaction"]);
+const DIFFICULTY_SET = new Set(["easy", "medium", "hard", "reaction"]);
 const WINNER_SET = new Set(["you", "draw", "bot", "opponent"]);
 const MAX_SCORE = 1_000_000;
 const MAX_PATTERNS = 100_000;
@@ -125,7 +125,8 @@ function sanitizeMatchPayload(payload) {
   const difficulty = normalizeText(payload.difficulty || "medium", 12).toLowerCase();
   if (!DIFFICULTY_SET.has(difficulty)) return { ok: false, message: "Invalid difficulty." };
 
-  const duration = parseIntBounded(payload.duration, { min: 60, max: 120 });
+  const durationBounds = mode === "reaction" ? { min: 1, max: 3600 } : { min: 60, max: 120 };
+  const duration = parseIntBounded(payload.duration, durationBounds);
   if (duration == null) return { ok: false, message: "Invalid duration." };
 
   const playerScore = parseIntBounded(payload.playerScore, { min: 0, max: MAX_SCORE });
@@ -156,12 +157,37 @@ function sanitizeMatchPayload(payload) {
   let stats = null;
   if (payload.stats != null) {
     if (typeof payload.stats !== "object") return { ok: false, message: "Invalid stats." };
-    const clicks = parseIntBounded(payload.stats.clicks, { min: 0, max: MAX_SCORE });
-    const correct = parseIntBounded(payload.stats.correct, { min: 0, max: MAX_SCORE });
-    const wrong = parseIntBounded(payload.stats.wrong, { min: 0, max: MAX_SCORE });
-    if (clicks == null || correct == null || wrong == null) return { ok: false, message: "Invalid stats values." };
-    if (correct + wrong > clicks) return { ok: false, message: "Invalid stats consistency." };
-    stats = { clicks, correct, wrong };
+    if (mode === "reaction") {
+      const reactionStats = payload.stats.reaction;
+      if (reactionStats == null || typeof reactionStats !== "object") {
+        return { ok: false, message: "Invalid reaction stats." };
+      }
+      const hits = parseIntBounded(reactionStats.hits, { min: 0, max: MAX_SCORE });
+      const earlyTaps = parseIntBounded(reactionStats.earlyTaps, { min: 0, max: MAX_SCORE });
+      const avgReactionMs = parseIntBounded(reactionStats.avgReactionMs, { min: 0, max: 100_000 });
+      const bestReactionMs = parseIntBounded(reactionStats.bestReactionMs, { min: 0, max: 100_000, allowNull: true });
+      if (hits == null || earlyTaps == null || avgReactionMs == null) {
+        return { ok: false, message: "Invalid reaction stats values." };
+      }
+      if (bestReactionMs != null && bestReactionMs > avgReactionMs * 10 + 5000) {
+        return { ok: false, message: "Invalid reaction stats consistency." };
+      }
+      stats = {
+        reaction: {
+          hits,
+          earlyTaps,
+          avgReactionMs,
+          bestReactionMs
+        }
+      };
+    } else {
+      const clicks = parseIntBounded(payload.stats.clicks, { min: 0, max: MAX_SCORE });
+      const correct = parseIntBounded(payload.stats.correct, { min: 0, max: MAX_SCORE });
+      const wrong = parseIntBounded(payload.stats.wrong, { min: 0, max: MAX_SCORE });
+      if (clicks == null || correct == null || wrong == null) return { ok: false, message: "Invalid stats values." };
+      if (correct + wrong > clicks) return { ok: false, message: "Invalid stats consistency." };
+      stats = { clicks, correct, wrong };
+    }
   }
 
   return {

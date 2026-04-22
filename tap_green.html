@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tap Green - MindSnap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tap_green.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hud">
+      <div class="hud-card">
+        <div class="label">Score</div>
+        <strong id="scoreValue">0</strong>
+      </div>
+      <div class="hud-card">
+        <div class="label">State</div>
+        <strong id="stateValue">IDLE</strong>
+      </div>
+      <div class="hud-card">
+        <div class="label">Trials</div>
+        <strong id="trialsValue">0</strong>
+      </div>
+    </header>
+
+    <section class="zone-wrap">
+      <button id="tapZone" class="tap-zone idle" type="button" aria-label="Tap reaction zone">
+        <span id="zoneLabel">Press Start</span>
+      </button>
+      <p id="feedback" class="feedback">Tap only when green.</p>
+    </section>
+
+    <footer class="controls">
+      <button id="startBtn" class="ctrl-btn start" type="button">Start</button>
+      <button id="stopBtn" class="ctrl-btn stop" type="button" disabled>Stop</button>
+      <a class="ctrl-btn home" href="index.html">Back to Home</a>
+    </footer>
+  </main>
+
+  <div id="resultOverlay" class="overlay" hidden>
+    <section class="overlay-card" aria-live="polite">
+      <p class="mode">Reaction Result</p>
+      <h2 id="resultTitle">Session Complete</h2>
+      <p id="resultScore" class="result-score">Score: 0</p>
+      <p id="resultDetails" class="result-details">Hits: 0 | Early taps: 0 | Avg: 0 ms | Best: -</p>
+      <button id="closeResultBtn" class="ctrl-btn start" type="button">Close</button>
+    </section>
+  </div>
+
+  <script type="module" src="tap_green.js"></script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+:root {
+  --bg-0: #041017;
+  --bg-1: #0b2638;
+  --ink: #e9fbff;
+  --ink-soft: rgba(233, 251, 255, 0.8);
+  --line: rgba(117, 229, 255, 0.28);
+  --panel: rgba(7, 22, 35, 0.84);
+  --idle: #27465f;
+  --red: #ff4e5d;
+  --green: #45df87;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(88, 243, 255, 0.18), transparent 42%),
+    radial-gradient(circle at 86% 10%, rgba(69, 223, 135, 0.14), transparent 42%),
+    linear-gradient(150deg, var(--bg-0), var(--bg-1));
+}
+
+.app {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.hud-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 0.7rem;
+  text-align: center;
+}
+
+.hud-card .label {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+
+.hud-card strong {
+  font-size: clamp(1.1rem, 2.9vw, 1.5rem);
+}
+
+.zone-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.tap-zone {
+  width: min(720px, 96%);
+  aspect-ratio: 1.6 / 1;
+  border: 0;
+  border-radius: 16px;
+  font: 800 clamp(1.3rem, 5vw, 2.4rem) "JetBrains Mono", monospace;
+  color: #031218;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 80ms ease, background-color 80ms linear;
+  user-select: none;
+}
+
+.tap-zone:active {
+  transform: scale(0.985);
+}
+
+.tap-zone.idle,
+.tap-zone.waiting {
+  background: var(--idle);
+  color: #d9f4ff;
+}
+
+.tap-zone.red {
+  background: var(--red);
+}
+
+.tap-zone.green {
+  background: var(--green);
+}
+
+.feedback {
+  margin: 0;
+  min-height: 1.4rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.controls {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: center;
+}
+
+.ctrl-btn {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.62rem 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  text-decoration: none;
+  font: 700 0.95rem "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.ctrl-btn.start {
+  border: 0;
+  background: linear-gradient(95deg, #61ffab, #58f3ff);
+  color: #06161f;
+}
+
+.ctrl-btn.stop {
+  border-color: rgba(255, 78, 93, 0.5);
+}
+
+.ctrl-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(3, 10, 18, 0.84);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.overlay[hidden] {
+  display: none !important;
+}
+
+.overlay-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(8, 24, 38, 0.95);
+  padding: 1rem;
+  text-align: center;
+}
+
+.overlay-card .mode {
+  margin: 0;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.overlay-card h2 {
+  margin: 0.4rem 0;
+}
+
+.result-score,
+.result-details {
+  margin: 0.35rem 0;
+}
+
+@media (max-width: 680px) {
+  .hud {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    flex-direction: column;
+  }
+
+  .tap-zone {
+    width: 100%;
+    aspect-ratio: 1.2 / 1;
+  }
+}
