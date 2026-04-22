@@ -6,6 +6,7 @@ const { createClient } = window.supabase || {};
 const PREVIEW_MS = 1500;
 const BETWEEN_PATTERN_MS = 312;
 const PVP_START_COUNTDOWN_SEC = 3;
+const RESULT_REDIRECT_MS = 2600;
 
 const DIFFICULTY = {
   easy: { minGrid: 3, maxGrid: 5, density: 0.22 },
@@ -180,6 +181,7 @@ const state = {
   endedAt: null,
   clientMatchId: null,
   pendingEndPayload: null,
+  returnHomeId: null,
   player: {
     totalScore: 0,
     patternCount: 0,
@@ -350,6 +352,13 @@ function sendPvPFinal() {
   });
 }
 
+function scheduleReturnHome() {
+  clearTimeout(state.returnHomeId);
+  state.returnHomeId = setTimeout(() => {
+    window.location.href = "index.html";
+  }, RESULT_REDIRECT_MS);
+}
+
 function endPvPBecauseLeft() {
   if (!state.pvp.enabled) return;
   state.live = false;
@@ -365,9 +374,10 @@ function endPvPBecauseLeft() {
 
   resultModeEl.textContent = "Multiplayer Result";
   resultTitleEl.textContent = "Opponent Left";
-  resultBodyEl.textContent = `Final score: ${state.player.totalScore}`;
+  resultBodyEl.textContent = `Final score: ${state.player.totalScore}. Returning to Home...`;
   overlayEl.classList.add("show");
   playAgainBtn.style.display = "";
+  scheduleReturnHome();
 
   state.endedAt = new Date().toISOString();
   stashPendingEnd(buildEndPayload());
@@ -460,14 +470,18 @@ function initPvPRealtime() {
         console.warn("[MP] match channel status", status);
         if (state.live) {
           state.live = false;
+          clearTimeout(state.hardEndId);
+          clearTimeout(state.pvp.countdownId);
+          clearTimeout(state.pvp.startTimeoutId);
           cancelAnimationFrame(state.rafId);
           setAllTilesDisabled(true);
           setBoardLoading(false);
 
           resultModeEl.textContent = "Multiplayer Result";
           resultTitleEl.textContent = "Connection Error";
-          resultBodyEl.textContent = "Realtime connection failed. Return to Home and retry multiplayer.";
+          resultBodyEl.textContent = "Realtime connection failed. Returning to Home...";
           overlayEl.classList.add("show");
+          scheduleReturnHome();
         }
       }
     });
@@ -756,6 +770,8 @@ function buildEndPayload() {
 
   return {
     matchId: state.clientMatchId,
+    playerName: localPlayerName,
+    opponentName: mode === "pvp" ? (state.pvp.opponentName || null) : mode === "duel" ? "Bot" : null,
     mode,
     difficulty: difficultyKey,
     duration,
@@ -866,6 +882,8 @@ function endMatch() {
 
   overlayEl.classList.add("show");
   playAgainBtn.style.display = "";
+  resultBodyEl.textContent = `${resultBodyEl.textContent} Returning to Home...`;
+  scheduleReturnHome();
 
   // Queue and send ONLY after match end.
   state.endedAt = new Date().toISOString();
@@ -884,6 +902,7 @@ function resetMatch() {
   clearTimeout(state.hardEndId);
   clearTimeout(state.pvp.countdownId);
   clearTimeout(state.pvp.startTimeoutId);
+  clearTimeout(state.returnHomeId);
   clearTimeout(state.player.pauseId);
   clearTimeout(state.player.nextId);
   clearTimeout(state.bot.pauseId);
@@ -989,6 +1008,7 @@ window.addEventListener("beforeunload", (e) => {
 flushPendingFromStorage();
 
 function exitToHome() {
+  clearTimeout(state.returnHomeId);
   try {
     state.pvp.channel?.send({ type: "broadcast", event: "leave", payload: { fromUserId: localClientId } });
   } catch {

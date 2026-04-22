@@ -71,6 +71,15 @@
           <button id="duel-btn" class="action-btn duel">Duels (Bot)</button>
           <button id="multi-btn" class="action-btn multi">Multiplayer</button>
         </div>
+
+        <section class="history-panel" aria-labelledby="history-title">
+          <div class="history-head">
+            <h3 id="history-title">Player History</h3>
+            <button id="history-refresh" class="history-refresh" type="button">Refresh</button>
+          </div>
+          <p id="history-status" class="history-status">Loading match history...</p>
+          <ul id="history-list" class="history-list"></ul>
+        </section>
       </section>
     </main>
 
@@ -249,6 +258,9 @@
       const radarCancel = document.getElementById("radar-cancel");
       const radarSub = document.getElementById("radar-sub");
       const radarBlips = document.getElementById("radar-blips");
+      const historyList = document.getElementById("history-list");
+      const historyStatus = document.getElementById("history-status");
+      const historyRefreshBtn = document.getElementById("history-refresh");
 
       const MIN_SCAN_MS = 3000;
       const MATCH_START_DELAY_MS = 5000;
@@ -293,6 +305,103 @@
       let playerName = ensureName();
       if (!playerName) openNameModal();
 
+      function historyOutcomeLabel(match) {
+        if (!match || typeof match !== "object") return "Unknown";
+        if (match.winner === "you") return "Won";
+        if (match.winner === "draw") return "Draw";
+        if (match.winner === "bot" || match.winner === "opponent") return "Lost";
+        return "Finished";
+      }
+
+      function historyScoreLabel(match) {
+        const yourScore = Number(match?.playerScore || 0);
+        if (match?.mode === "solo") return `Score ${yourScore}`;
+        const other = match?.botScore == null ? 0 : Number(match.botScore);
+        return `You ${yourScore} vs ${other}`;
+      }
+
+      function formatDateLabel(isoValue) {
+        if (!isoValue) return "Unknown time";
+        const d = new Date(isoValue);
+        if (Number.isNaN(d.getTime())) return "Unknown time";
+        return d.toLocaleString();
+      }
+
+      function renderHistory(matches) {
+        historyList.textContent = "";
+        if (!matches.length) {
+          historyStatus.textContent = "No matches yet for this player.";
+          return;
+        }
+
+        historyStatus.textContent = "";
+        for (const match of matches.slice(0, 8)) {
+          const item = document.createElement("li");
+          item.className = "history-item";
+
+          const top = document.createElement("div");
+          top.className = "history-item-top";
+
+          const outcome = document.createElement("span");
+          outcome.className = `history-outcome ${historyOutcomeLabel(match).toLowerCase()}`;
+          outcome.textContent = historyOutcomeLabel(match);
+
+          const mode = document.createElement("span");
+          mode.className = "history-mode";
+          mode.textContent = String(match.mode || "solo").toUpperCase();
+
+          top.appendChild(outcome);
+          top.appendChild(mode);
+
+          const score = document.createElement("p");
+          score.className = "history-score";
+          score.textContent = historyScoreLabel(match);
+
+          const meta = document.createElement("p");
+          meta.className = "history-meta";
+          const diff = String(match.difficulty || "medium");
+          meta.textContent = `${diff[0].toUpperCase()}${diff.slice(1)} • ${formatDateLabel(match.endedAt)}`;
+
+          item.appendChild(top);
+          item.appendChild(score);
+          item.appendChild(meta);
+          historyList.appendChild(item);
+        }
+      }
+
+      async function loadHistory() {
+        const activeName = safeName(playerName || "");
+        historyRefreshBtn.disabled = true;
+        historyStatus.textContent = "Loading match history...";
+
+        try {
+          const res = await fetch("/api/matches", { cache: "no-store" });
+          if (!res.ok) throw new Error("History fetch failed");
+          const data = await res.json();
+          const all = Array.isArray(data?.matches) ? data.matches : [];
+
+          // If named records exist, show records only for this player name.
+          const named = all.filter((m) => safeName(m?.playerName || "").length > 0);
+          const source = named.length > 0 ? named : all;
+          const filtered = activeName
+            ? source.filter((m) => safeName(m?.playerName || activeName).toLowerCase() === activeName.toLowerCase())
+            : source;
+
+          filtered.sort((a, b) => {
+            const ta = new Date(a?.endedAt || 0).getTime();
+            const tb = new Date(b?.endedAt || 0).getTime();
+            return tb - ta;
+          });
+
+          renderHistory(filtered);
+        } catch {
+          historyList.textContent = "";
+          historyStatus.textContent = "History unavailable. Start server to load local match data.";
+        } finally {
+          historyRefreshBtn.disabled = false;
+        }
+      }
+
       nameForm.addEventListener("submit", (e) => {
         e.preventDefault();
         const value = safeName(nameInput.value);
@@ -304,7 +413,11 @@
         localStorage.setItem(NAME_KEY, playerName);
         nameError.textContent = "";
         closeNameModal();
+        loadHistory();
       });
+
+      historyRefreshBtn.addEventListener("click", loadHistory);
+      loadHistory();
 
       // Multiplayer (Supabase Realtime Presence + Broadcast)
       const DEBUG_MP = true;

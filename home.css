@@ -371,6 +371,107 @@ h1 {
   background: linear-gradient(95deg, #b4a4ff, #66ffd5);
 }
 
+.history-panel {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(7, 22, 35, 0.82);
+  padding: 0.75rem;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.history-head h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+}
+
+.history-refresh {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.42rem 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font: 700 0.84rem "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.history-refresh:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.history-status {
+  margin: 0.58rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0.58rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.52rem;
+  max-height: 236px;
+  overflow: auto;
+}
+
+.history-item {
+  border: 1px solid rgba(117, 229, 255, 0.17);
+  border-radius: 10px;
+  background: rgba(13, 34, 53, 0.72);
+  padding: 0.55rem 0.62rem;
+}
+
+.history-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.history-outcome {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.history-outcome.won {
+  color: #96ffb6;
+}
+
+.history-outcome.lost {
+  color: #ff9aa1;
+}
+
+.history-outcome.draw {
+  color: #90ecff;
+}
+
+.history-mode {
+  font-size: 0.73rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.05em;
+}
+
+.history-score {
+  margin: 0.22rem 0 0;
+  font-size: 0.9rem;
+}
+
+.history-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
 .tour-overlay {
   position: fixed;
   inset: 0;
